@@ -1,0 +1,267 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Stride.CommunityToolkit.ImGui</name>
+    </assembly>
+    <members>
+        <member name="T:Stride.CommunityToolkit.ImGui.BaseWindow">
+            <summary>
+            Base class for creating ImGui windows in Stride.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.BaseWindow.#ctor(Stride.Core.IServiceRegistry)">
+            <inheritdoc />
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.BaseWindow.Update(Stride.Games.GameTime)">
+            <inheritdoc />
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.BaseWindow.OnDraw(System.Boolean)">
+            <inheritdoc />
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.BaseWindow.OnDestroy">
+            <inheritdoc />
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.BaseWindow.Destroy">
+            <inheritdoc />
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.HierarchyView">
+            <summary>
+            A window that shows the hierarchy of scenes and entities in the current scene.
+            </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.HierarchyView._recursingThrough">
+            <summary>
+            Based on hashcodes, it doesn't have to be exact, we just don't want to keep references from being collected
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.HierarchyView.OnDraw(System.Boolean)">
+            <inheritdoc />
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.HierarchyView.OnDestroy">
+            <inheritdoc />
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.ImGuiExtension.GetTextureKey(Stride.Graphics.Texture)">
+            <summary>
+            Gets a pointer to the Texture and adds it to the <see cref="F:Stride.CommunityToolkit.ImGui.ImGuiExtension._textureRegistry"/> if it was not previously added.
+            </summary>
+            <param name="texture"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.ImGuiExtension.TryGetTexture(System.UInt64,Stride.Graphics.Texture@)">
+            <summary>
+            Attempts to convert a pointer to a texture if its in the <see cref="F:Stride.CommunityToolkit.ImGui.ImGuiExtension._textureRegistry"/>
+            </summary>
+            <param name="key"></param>
+            <param name="texture"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.ImGuiExtension.ClearTextures">
+            <summary>
+            Clears the dictionaries that contain the mappings between textures and their reference ids:
+            <see cref="F:Stride.CommunityToolkit.ImGui.ImGuiExtension._textureRegistry"/> <see cref="!:_pointerRegistry"/>
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.ImGuiExtension.Image(Stride.Graphics.Texture)">
+            <summary>
+            Adds a texture to the ImGui element with the Texture width and height
+            </summary>
+            <param name="texture"></param>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.ImGuiExtension.Image(Stride.Graphics.Texture,System.Int32,System.Int32)">
+            <summary>
+            Adds a texture to the ImGui element with a custom width and height
+            </summary>
+            <param name="texture"></param>
+            <param name="width"></param>
+            <param name="height"></param>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.ImGuiExtension.ImageButton(System.String,Stride.Graphics.Texture)">
+            <summary>
+            Adds a texture to the ImGui element button with the Texture width and height
+            </summary>
+            <param name="text"></param>
+            <param name="texture"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.ImGuiExtension.ImageButton(System.String,Stride.Graphics.Texture,System.Int32,System.Int32)">
+            <summary>
+            Adds a texture to the ImGui element button with a custom width and height
+            </summary>
+            <param name="strid"></param>
+            <param name="texture"></param>
+            <param name="width"></param>
+            <param name="height"></param>
+            <returns></returns>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.Inspector">
+            <summary>
+            Inspector window for debugging and modifying object properties.
+            </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.Inspector.FILTER_VALUES">
+            <summary> Array of all possible <see cref="T:Stride.CommunityToolkit.ImGui.Inspector.Filter"/> values </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.Inspector.ValueHandler">
+            <summary> A UI handler function to draw and modify values </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.Inspector.ValueDrawingHandlers">
+            <summary> Add your drawing functions to explicitly override drawing for objects of the given type </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.Inspector._inspectors">
+            <summary> Any live inspectors </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.Inspector._openedId">
+            <summary> Opened sub object of the inspected object in the tree view </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.Inspector._target">
+            <summary> Lets not keep references from being GCed </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.Inspector.Locked">
+            <summary> Is this interface returned by <see cref="M:Stride.CommunityToolkit.ImGui.Inspector.FindFreeInspector(Stride.Core.IServiceRegistry)"/> </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.Inspector.EnumerableView">
+            <summary> Show specialized interface to handle IEnumerable types </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.Inspector.TypeAsStatic">
+            <summary>
+            For <see cref="P:Stride.CommunityToolkit.ImGui.Inspector.Target"/> of type <see cref="T:System.Type"/>, return the content of 'static type.*' instead of 'typeof(type).*'
+            </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.ImGui.Inspector.MemberFilter">
+            <summary> Members shown within the interface </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.ImGui.Inspector.Target">
+            <summary> The object to inspect </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.Inspector.TypeCache.GetAllMembers(System.Type)">
+            <summary> Reflection doesn't provide private inherited fields for some reason, this resolves that issue </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.LightweightTimer">
+            <summary>
+            Represents a lightweight timer for measuring elapsed time with minimal overhead.
+            </summary>
+            <remarks>This struct provides methods to start, restart, and retrieve elapsed time. It is designed for
+            scenarios where performance is critical, such as in tight loops or high-frequency operations. Use <see
+            cref="M:Stride.CommunityToolkit.ImGui.LightweightTimer.StartNew"/> to create and start a new timer, <see cref="M:Stride.CommunityToolkit.ImGui.LightweightTimer.Start"/> to reset and start the timer, and <see
+            cref="P:Stride.CommunityToolkit.ImGui.LightweightTimer.Elapsed"/> to retrieve the elapsed time since the timer was started.</remarks>
+        </member>
+        <member name="P:Stride.CommunityToolkit.ImGui.LightweightTimer.InitTime">
+            <summary>
+            Gets the initial timestamp when the timer was started.
+            </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.ImGui.LightweightTimer.Elapsed">
+            <summary>
+            Gets the elapsed time since the timer was started.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.LightweightTimer.Start">
+            <summary>
+            Starts or restarts the timer by recording the current timestamp.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.LightweightTimer.Restart">
+            <summary>
+            Use this function and its return value when inside a loop instead of <see cref="P:Stride.CommunityToolkit.ImGui.LightweightTimer.Elapsed"/>
+            as it guarantees that no time will be discarded
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.LightweightTimer.StartNew">
+            <summary>
+            Creates and starts a new instance of the <see cref="T:Stride.CommunityToolkit.ImGui.LightweightTimer"/> class.
+            </summary>
+            <returns>A <see cref="T:Stride.CommunityToolkit.ImGui.LightweightTimer"/> instance that has been started and is ready to measure elapsed time.</returns>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.PerfMonitor">
+            <summary>
+            Performance monitor window for Stride Engine
+            </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.PerfMonitor._threadStaticCollection">
+            <summary>
+            Circumvent <see cref="F:Stride.CommunityToolkit.ImGui.PerfMonitor._cpuSamples"/> dictionary access access but
+            only works for <see cref="F:Stride.CommunityToolkit.ImGui.PerfMonitor._threadStaticMonitor"/>
+            </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.PerfMonitor._threadStaticMonitor">
+            <summary> Owner of <see cref="F:Stride.CommunityToolkit.ImGui.PerfMonitor._threadStaticCollection"/> </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.PerfMonitor.Sample(System.Boolean,System.Int32,System.String,System.String)">
+            <summary>
+            Place within a using statement to monitor the code within it.
+            Creates a string each call which will produces unneeded garbage,
+            see <see cref="M:Stride.CommunityToolkit.ImGui.PerfMonitor.Sample(System.String,System.Boolean)"/> for alloc less version.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.PerfMonitor.Sample(System.String,System.Boolean)">
+            <summary> Place within a using statement to monitor the code within it </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.PerfMonitor.Guaranteed``2(System.Collections.Generic.IDictionary{``0,``1},``0)">
+            <summary> Guarantees that this key exist and returns at least a default new() value </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.PerfMonitor.PerfSampler">
+            <summary>
+            Put this within a using statement to log performance of the code within it.
+            Creates a new <see cref="T:Stride.CommunityToolkit.ImGui.PerfMonitor.SampleInstance"/> for the attached <see cref="T:Stride.CommunityToolkit.ImGui.PerfMonitor"/>
+            once <see cref="M:Stride.CommunityToolkit.ImGui.PerfMonitor.PerfSampler.#ctor(System.String,Stride.CommunityToolkit.ImGui.PerfMonitor,System.Int32)"/> and <see cref="M:Stride.CommunityToolkit.ImGui.PerfMonitor.PerfSampler.Dispose"/> have been called.
+            The duration sent to the <see cref="T:Stride.CommunityToolkit.ImGui.PerfMonitor"/> will be the one between those calls.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.PerfMonitor.PerfSampler.Dispose">
+            <summary> Dispose of it to log it to the PerfMonitor </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.PerfMonitor.GraphPoint">
+            <summary>
+            This struct's operation expects it to only contain instance fields of <see cref="T:System.Single"/> type.
+            </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.PerfMonitor.SampleInstance">
+            <summary> Object containing a sample's data </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.PerfMonitor.SampleInstance.#ctor(System.String,System.Int32,System.TimeSpan,System.Double,System.Nullable{System.Int64})">
+            <summary> Object containing a sample's data </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.PerfMonitor.TemporaryStrideSample">
+            <summary> Object to hold Stride's profiler samples until they are marked as done </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.PerfMonitor.ThreadSampleCollection">
+            <summary>
+            A collection of <see cref="T:Stride.CommunityToolkit.ImGui.PerfMonitor.SampleInstance"/> for a specific thread,
+            samples are aggregated and once <see cref="M:Stride.CommunityToolkit.ImGui.PerfMonitor.ThreadSampleCollection.SetReady"/> called,
+            will be pushed to <see cref="P:Stride.CommunityToolkit.ImGui.PerfMonitor.ThreadSampleCollection.Displayed"/>.
+            </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.ImGui.PerfMonitor.ThreadSampleCollection.Depth">
+            <summary>
+            Current depth (sample within sample) of this thread,
+            should be incremented when starting and decremented
+            when ending a sample by the <see cref="T:Stride.CommunityToolkit.ImGui.PerfMonitor.PerfSampler"/>.
+            </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.ImGui.PerfMonitor.ThreadSampleCollection.Displayed">
+            <summary>
+            Display-ready samples: samples that have ended before the end of the frame.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.PerfMonitor.ThreadSampleCollection.SetReady">
+            <summary> We received all of the data for this frame, set it has ready </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.PerfMonitor.ThreadSampleCollection.Add(Stride.CommunityToolkit.ImGui.PerfMonitor.SampleInstance)">
+            <summary> The given sample has finished and is ready to be displayed </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.PerfMonitor.ThreadSampleCollection.ClearBuffered">
+            <summary> Clear any samples buffered </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.ImGui.XMLDocumentation">
+            <summary>
+            Utility class to provide documentation for various types where available with the assembly
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.XMLDocumentation.TryGetDocumentation(System.Reflection.MemberInfo,System.Xml.XmlElement@)">
+            <summary> Returns false if the documentation file wasn't found </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.ImGui.XMLDocumentation.TryGetSummary(System.Reflection.MemberInfo,System.String@)">
+            <summary> Returns false if the documentation file wasn't found </summary>
+        </member>
+    </members>
+</doc>

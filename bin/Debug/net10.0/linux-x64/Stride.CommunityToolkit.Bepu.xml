@@ -1,0 +1,454 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Stride.CommunityToolkit.Bepu</name>
+    </assembly>
+    <members>
+        <member name="T:Stride.CommunityToolkit.Bepu.Bepu2DPhysicsOptions">
+            <summary>
+            Option set for creating a Bepu-physics enabled 2D-style primitive entity.
+            </summary>
+            <remarks>
+            Extends <see cref="T:Stride.CommunityToolkit.Engine.Primitive2DEntityOptions"/> with a Bepu <see cref="T:Stride.BepuPhysics.CollidableComponent"/>. The default is a dynamic
+            <see cref="T:Stride.CommunityToolkit.Bepu.Body2DComponent"/> having an empty <see cref="T:Stride.BepuPhysics.Definitions.Colliders.CompoundCollider"/>. Although termed "2D", simulation occurs
+            in 3D space with constraints limiting motion to the XY plane.
+            </remarks>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.Bepu2DPhysicsOptions.Component">
+            <summary>
+            Gets or sets the Bepu collidable component to attach. Defaults to a new <see cref="T:Stride.CommunityToolkit.Bepu.Body2DComponent"/> with an empty
+            <see cref="T:Stride.BepuPhysics.Definitions.Colliders.CompoundCollider"/>.
+            </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.Bepu2DPhysicsOptions.IncludeCollider">
+            <summary>
+            When true (default), a collider shape matching the primitive type is auto-created and added.
+            When false, the <see cref="T:Stride.BepuPhysics.CollidableComponent"/> is attached without shapes; you can add shapes later.
+            </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.Bepu3DPhysicsOptions">
+            <summary>
+            Option set for creating a Bepu-physics enabled 3D primitive entity.
+            </summary>
+            <remarks>
+            Inherits geometry / rendering options from <see cref="T:Stride.CommunityToolkit.Engine.Primitive3DEntityOptions"/> and adds a configurable Bepu
+            <see cref="T:Stride.BepuPhysics.CollidableComponent"/>. The default is a dynamic <see cref="T:Stride.BepuPhysics.BodyComponent"/> with an empty
+            <see cref="T:Stride.BepuPhysics.Definitions.Colliders.CompoundCollider"/>; shape(s) are typically populated later by helper extensions based on the chosen primitive type.
+            </remarks>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.Bepu3DPhysicsOptions.Component">
+            <summary>
+            Gets or sets the Bepu collidable component to attach. Defaults to a new dynamic <see cref="T:Stride.BepuPhysics.BodyComponent"/>
+            containing an empty <see cref="T:Stride.BepuPhysics.Definitions.Colliders.CompoundCollider"/>.
+            </summary>
+            <remarks>
+            Replace with a <see cref="T:Stride.BepuPhysics.StaticComponent"/> for immovable geometry or preconfigure collider children before
+            passing the options instance to a creation helper.
+            </remarks>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.Bepu3DPhysicsOptions.IncludeCollider">
+            <summary>
+            When true (default), a collider shape matching the primitive type is auto-created and added.
+            When false, the <see cref="T:Stride.BepuPhysics.CollidableComponent"/> is attached without shapes; you can add shapes later.
+            </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.Body2DComponent">
+            <summary>
+            Dynamic body constrained to a 2D plane (XY) while still using Bepu's 3D solver.
+            </summary>
+            <remarks>
+            This component locks angular motion to the Z axis by zeroing the X/Y inverse inertia terms once at attach time
+            and applies a small pre-solve velocity correction each frame to drive the body back onto the Z = 0 plane.
+            The correction avoids post-solve teleports which can inject energy and destabilize piles, especially with convex hulls.
+            </remarks>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Body2DComponent.#ctor">
+            <summary>
+            Creates a new <see cref="T:Stride.CommunityToolkit.Bepu.Body2DComponent"/>. Interpolation is enabled by default.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Body2DComponent.AttachInner(BepuPhysics.RigidPose,BepuPhysics.BodyInertia,BepuPhysics.Collidables.TypedIndex)">
+            <inheritdoc />
+            <remarks>
+            Keeps the shape-derived inertia so roll (Z angular motion) works and zeros X/Y inverse inertia to restrict yaw/pitch.
+            Also applies mild stability tweaks for convex hull colliders (damping and recovery velocity cap).
+            </remarks>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Body2DComponent.HasConvexHull(Stride.BepuPhysics.Definitions.Colliders.ICollider)">
+            <summary>
+            Returns true if the collider hierarchy contains at least one <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/>.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Body2DComponent.SimulationUpdate(Stride.BepuPhysics.BepuSimulation,System.Single)">
+            <summary>
+            Called before the physics tick to perform pre-solve corrections.
+            </summary>
+            <param name="sim">Active simulation.</param>
+            <param name="simTimeStep">Fixed time step size in seconds.</param>
+            <remarks>
+            Applies a proportional velocity correction on the Z axis to drive the body back to the plane (Z = 0):
+            <c>vZ = -Position.Z</c>. This avoids injecting energy while keeping the body constrained to 2D.
+            </remarks>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Body2DComponent.AfterSimulationUpdate(Stride.BepuPhysics.BepuSimulation,System.Single)">
+            <summary>
+            Called after the physics tick. Intentionally left empty for this component.
+            </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.CameraComponentExtensions">
+            <summary>
+            Provides extension methods for <see cref="T:Stride.Engine.CameraComponent"/> to facilitate raycasting functionality.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.CameraComponentExtensions.RaycastMouse(Stride.Engine.CameraComponent,Stride.Engine.ScriptComponent,System.Single,Stride.BepuPhysics.HitInfo@,Stride.BepuPhysics.CollisionMask)">
+            <summary>
+            Performs a raycast using the mouse's screen position.
+            </summary>
+            <param name="camera">The <see cref="T:Stride.Engine.CameraComponent"/> used to calculate the ray.</param>
+            <param name="component">The <see cref="T:Stride.Engine.ScriptComponent"/> providing access to the mouse position.</param>
+            <param name="maxDistance">The maximum distance for the raycast.</param>
+            <param name="hit">
+            When this method returns, contains the <see cref="T:Stride.BepuPhysics.HitInfo"/> if the raycast hits a collider, otherwise <c>null</c>.
+            </param>
+            <param name="collisionMask">
+            Specifies the collision mask to filter which objects the raycast can hit. Defaults to <see cref="F:Stride.BepuPhysics.CollisionMask.Everything"/>.
+            </param>
+            <returns><c>true</c> if the raycast hit a collider; otherwise, <c>false</c>.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown if <paramref name="camera"/> or <paramref name="component"/> is <c>null</c>.</exception>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.CameraComponentExtensions.Raycast(Stride.Engine.CameraComponent,Stride.Core.Mathematics.Vector2,System.Single,Stride.BepuPhysics.HitInfo@,Stride.BepuPhysics.CollisionMask)">
+            <summary>
+            Performs a raycast using a screen position.
+            </summary>
+            <param name="camera">The <see cref="T:Stride.Engine.CameraComponent"/> used to calculate the ray.</param>
+            <param name="screenPosition">The screen position in normalized device coordinates (NDC).</param>
+            <param name="maxDistance">The maximum distance for the raycast.</param>
+            <param name="hit">
+            When this method returns, contains the <see cref="T:Stride.BepuPhysics.HitInfo"/> if the raycast hits a collider, otherwise <c>null</c>.
+            </param>
+            <param name="collisionMask">
+            Specifies the collision mask to filter which objects the raycast can hit. Defaults to <see cref="F:Stride.BepuPhysics.CollisionMask.Everything"/>.
+            </param>
+            <returns><c>true</c> if the raycast hit a collider; otherwise, <c>false</c>.</returns>
+            <exception cref="T:System.ArgumentNullException">Thrown if <paramref name="camera"/> is <c>null</c>.</exception>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.CollidableGizmoScript">
+            <summary>
+            Toggles visualization gizmos for all <see cref="T:Stride.BepuPhysics.CollidableComponent"/> instances in the current scene
+            when a specified key is pressed.
+            </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.CollidableGizmoScript.Key">
+            <summary>
+            Gets or sets the key used to toggle collidable gizmos on and off. Default: <see cref="F:Stride.Input.Keys.P"/>.
+            </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.CollidableGizmoScript.Color">
+            <summary>
+            Gets or sets an optional emissive color applied to created gizmos. When <see langword="null"/>, the default material color is used.
+            </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.CollidableGizmoScript.SizeFactor">
+            <summary>
+            Gets or sets the size multiplier applied to created gizmos. Defaults to <c>1.0</c>.
+            </summary>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.CollidableGizmoScript.Visible">
+            <summary>
+            Gets a value indicating whether gizmos are currently active in the scene.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.CollidableGizmoScript.Start">
+            <inheritdoc />
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.CollidableGizmoScript.Update">
+            <inheritdoc />
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.Colliders.ConeCollider">
+             <summary>
+             Provides helpers to construct Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> instances from a cone primitive mesh.
+             </summary>
+             <remarks>
+             Builds a convex hull from a generated cone mesh. If no explicit size is provided,
+             default values are taken from <see cref="T:Stride.Rendering.ProceduralModels.ConeProceduralModel"/>.
+             The cone mesh is generated with 16 radial segments via <see cref="T:Stride.Graphics.GeometricPrimitives.GeometricPrimitive.Cone"/>.
+             </remarks>
+             <example>
+             <code>
+             // Create a collider using defaults from ConeProceduralModel
+             var collider = ConeCollider.Create(null);
+            
+             // Or create a collider with explicit radius (X) and height (Y); Z is unused
+             var collider2 = ConeCollider.Create(new Vector3(0.5f, 2.0f, 0f));
+             </code>
+             </example>
+             <seealso cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/>
+             <seealso cref="T:Stride.Graphics.GeometricPrimitives.GeometricPrimitive.Cone"/>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Colliders.ConeCollider.Create(System.Nullable{System.Numerics.Vector3})">
+            <summary>
+            Creates a Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> from a cone primitive mesh.
+            </summary>
+            <param name="size">
+            Optional size in world units: X = radius, Y = height, Z is unused and ignored.
+            When <c>null</c>, defaults from <see cref="T:Stride.Rendering.ProceduralModels.ConeProceduralModel"/> are used.
+            </param>
+            <returns>
+            A <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> whose hull is computed from the generated cone mesh.
+            </returns>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.Colliders.TeapotCollider">
+             <summary>
+             Provides helpers to construct Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> instances from a teapot primitive mesh.
+             </summary>
+             <remarks>
+             Builds a convex hull from a generated teapot mesh. If no explicit size is provided,
+             default values are taken from <see cref="T:Stride.Rendering.ProceduralModels.TeapotProceduralModel"/>.
+             The teapot mesh is generated with 16 radial segments via <see cref="T:Stride.Graphics.GeometricPrimitives.GeometricPrimitive.Teapot"/>.
+             </remarks>
+             <example>
+             <code>
+             // Create a collider using defaults from TeapotProceduralModel
+             var collider = TeapotCollider.Create(null);
+            
+             // Or create a collider with an explicit size (scale)
+             var collider2 = TeapotCollider.Create(0.75f);
+             </code>
+             </example>
+             <seealso cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/>
+             <seealso cref="T:Stride.Graphics.GeometricPrimitives.GeometricPrimitive.Teapot"/>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Colliders.TeapotCollider.Create(System.Nullable{System.Single})">
+            <summary>
+            Creates a Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> from a teapot primitive mesh.
+            </summary>
+            <param name="size">
+            Optional size (uniform scale) in world units. When <c>null</c>, defaults from <see cref="T:Stride.Rendering.ProceduralModels.TeapotProceduralModel"/> are used.
+            </param>
+            <returns>
+            A <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> whose hull is computed from the generated teapot mesh.
+            </returns>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.Colliders.TorusCollider">
+             <summary>
+             Provides helpers to construct Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> instances from a torus primitive mesh.
+             </summary>
+             <remarks>
+             Builds a convex hull from a generated torus mesh. If no explicit radii are provided,
+             default values are taken from <see cref="T:Stride.Rendering.ProceduralModels.TorusProceduralModel"/>.
+             The torus mesh is generated via <see cref="T:Stride.Graphics.GeometricPrimitives.GeometricPrimitive.Torus"/>.
+             </remarks>
+             <example>
+             <code>
+             // Create a collider using defaults from TorusProceduralModel
+             var collider = TorusCollider.Create(null, null);
+            
+             // Or create a collider with explicit major and minor radii
+             var collider2 = TorusCollider.Create(majorRadius: 1.25f, minorRadius: 0.35f);
+             </code>
+             </example>
+             <seealso cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/>
+             <seealso cref="T:Stride.Graphics.GeometricPrimitives.GeometricPrimitive.Torus"/>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Colliders.TorusCollider.Create(System.Nullable{System.Single},System.Nullable{System.Single})">
+            <summary>
+            Creates a Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> from a torus primitive mesh.
+            </summary>
+            <param name="majorRadius">Optional major radius of the torus. When <c>null</c>, defaults from <see cref="T:Stride.Rendering.ProceduralModels.TorusProceduralModel"/> are used.</param>
+            <param name="minorRadius">Optional minor radius (thickness) of the torus. When <c>null</c>, defaults from <see cref="T:Stride.Rendering.ProceduralModels.TorusProceduralModel"/> are used.</param>
+            <returns>
+            A <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> whose hull is computed from the generated torus mesh.
+            </returns>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.Colliders.TriangularPrismCollider">
+             <summary>
+             Provides helpers to construct Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> instances from a triangular prism primitive mesh.
+             </summary>
+             <remarks>
+             Builds a convex hull from a generated triangular prism mesh. If no explicit size is provided,
+             default values are taken from <see cref="T:Stride.CommunityToolkit.Rendering.ProceduralModels.TriangularPrismProceduralModel"/>.
+             The triangular cross-section lies in the X/Y plane and the prism extends along the Z axis (depth).
+             X specifies the base width of the triangle, Y specifies the triangle height, and Z specifies the prism depth.
+             </remarks>
+             <example>
+             <code>
+             // Create a collider using defaults from TriangularPrismProceduralModel
+             var collider = TriangularPrismCollider.Create(null);
+            
+             // Or create a collider with explicit base width (X), height (Y), and depth (Z)
+             var collider2 = TriangularPrismCollider.Create(new Vector3(1.0f, 1.0f, 2.0f));
+             </code>
+             </example>
+             <seealso cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Colliders.TriangularPrismCollider.Create(System.Nullable{Stride.Core.Mathematics.Vector3})">
+            <summary>
+            Creates a Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> from a triangular prism primitive mesh.
+            </summary>
+            <param name="size">
+            Optional size in world units: X = triangle base width, Y = triangle height, Z = prism depth.
+            When <c>null</c>, defaults from <see cref="T:Stride.CommunityToolkit.Rendering.ProceduralModels.TriangularPrismProceduralModel"/> are used.
+            </param>
+            <returns>
+            A <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> whose hull is computed from the generated triangular prism mesh.
+            </returns>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.DebugRenderComponentScript">
+             <summary>
+             Script that ensures a <see cref="T:Stride.BepuPhysics.Debug.DebugRenderComponent"/> is added to the owning <see cref="T:Stride.Engine.Entity"/>
+             once the scene is ready (when visibility groups are present).
+             </summary>
+             <remarks>
+             The <see cref="T:Stride.BepuPhysics.Debug.DebugRenderComponent"/> enables Bepu physics debug rendering. The debug component
+             itself exposes a <c>Visible</c> property and can be toggled at runtime using the keyboard key
+             <c>Keys.F11</c> (see <c>DebugRenderComponent</c> in the Bepu integration).
+            <br /><br />
+             Important details:<br />
+             - Adding this script/component to a single entity in the scene will activate the debug mesh
+               rendering for all Bepu physics entities in that scene (the debug rendering is global per-scene).<br />
+             - The component in this script is created with <c>Visible = false</c> by default to avoid
+               enabling debug rendering unexpectedly.<br />
+             - When a physics body is not awake, its debug mesh is rendered with a lighter color to indicate
+               the sleeping/non-awake state.
+             </remarks>
+        </member>
+        <member name="P:Stride.CommunityToolkit.Bepu.DebugRenderComponentScript.Visible">
+            <summary>
+            Gets or sets a value indicating whether the debug mesh is initially <see langword="true"/> when added.
+            </summary>
+        </member>
+        <member name="F:Stride.CommunityToolkit.Bepu.DebugRenderComponentScript._debugAdded">
+            <summary>
+            True when a <see cref="T:Stride.BepuPhysics.Debug.DebugRenderComponent"/> has already been added to the entity.
+            This prevents adding multiple debug components on subsequent frames.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.DebugRenderComponentScript.Update">
+            <summary>
+            Called once per frame by the engine. When the scene contains one or more visibility groups
+            and the debug component has not yet been added, this method creates and adds a
+            <see cref="T:Stride.BepuPhysics.Debug.DebugRenderComponent"/> to the <see cref="T:Stride.Engine.Entity"/>.
+            </summary>
+            <remarks>
+            This method intentionally performs a cheap count check every frame and only performs the
+            addition once. After the component is added, the component's visibility can be toggled
+            at runtime by pressing <c>Keys.F11</c> (handled by <see cref="T:Stride.BepuPhysics.Debug.DebugRenderComponent"/>).
+            See the class-level remarks for additional behavior: the debug renderer is global to the
+            scene, the component is added invisible by default here, and sleeping physics bodies use
+            a lighter mesh color.
+            </remarks>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.EntityExtensions">
+            <summary>
+            Provides extension methods for the <see cref="T:Stride.Engine.Entity"/> class to simplify adding Bepu 2D and 3D physics components.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.EntityExtensions.AddBepu2DPhysics(Stride.Engine.Entity,Stride.CommunityToolkit.Rendering.ProceduralModels.Primitive2DModelType,Stride.CommunityToolkit.Bepu.Bepu2DPhysicsOptions)">
+            <summary>
+            Adds Bepu 2D physics components to the entity.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.EntityExtensions.AddBepuPhysics(Stride.Engine.Entity,Stride.CommunityToolkit.Rendering.ProceduralModels.PrimitiveModelType,Stride.CommunityToolkit.Bepu.Bepu3DPhysicsOptions)">
+            <summary>
+            Adds Bepu 3D physics components to the entity.
+            </summary>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.Extensions.ConvexHullColliderExtensions">
+            <summary>
+            Helpers to build Bepu <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> instances from Stride procedural meshes.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Extensions.ConvexHullColliderExtensions.ToConvexHullCollider(Stride.Graphics.GeometricMeshData{Stride.Graphics.VertexPositionNormalTexture})">
+            <summary>
+            Builds a <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> from the raw mesh data.
+            </summary>
+            <remarks>
+            Uses the mesh vertices and indices without welding. Prefer <see cref="M:Stride.CommunityToolkit.Bepu.Extensions.ConvexHullColliderExtensions.ToConvexHullColliderWithWelding(Stride.Graphics.GeometricMeshData{Stride.Graphics.VertexPositionNormalTexture})"/> for stability when the source mesh contains duplicated vertices.
+            </remarks>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Extensions.ConvexHullColliderExtensions.ToConvexHullColliderWithWelding(Stride.Graphics.GeometricMeshData{Stride.Graphics.VertexPositionNormalTexture})">
+            <summary>
+            Builds a <see cref="T:Stride.BepuPhysics.Definitions.Colliders.ConvexHullCollider"/> from the mesh after welding near-duplicate vertices.
+            </summary>
+            <param name="meshData">Source mesh data.</param>
+            <returns>Convex hull collider with welded vertex data.</returns>
+            <remarks>
+            Welding reduces degenerate faces/edges from duplicated vertices (common in authored meshes), improving stability in dense contact scenarios.
+            </remarks>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.Extensions.ConvexHullColliderExtensions.WeldVertices(System.Collections.Generic.IReadOnlyList{Stride.Graphics.VertexPositionNormalTexture},System.Int32[],System.Single,Stride.Core.Mathematics.Vector3[]@,System.UInt32[]@)">
+            <summary>
+            Welds vertices that are within <paramref name="weldEpsilon"/> of each other and remaps the index buffer accordingly.
+            </summary>
+            <param name="vertices">Input vertex array.</param>
+            <param name="indices">Input index array.</param>
+            <param name="weldEpsilon">Distance threshold for welding in world units.</param>
+            <param name="outPositions">Unique welded positions.</param>
+            <param name="outIndices">Remapped indices targeting <paramref name="outPositions"/>.</param>
+        </member>
+        <member name="T:Stride.CommunityToolkit.Bepu.GameExtensions">
+            <summary>
+             Provides extension methods for the <see cref="T:Stride.Engine.Game"/> class to simplify common game setup tasks for the Bepu Physics engine.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.GameExtensions.SetupBase2DScene(Stride.Engine.Game)">
+            <summary>
+            Sets up a default 2D scene for the game, similar to creating an empty project through the editor.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.GameExtensions.SetupBase3DScene(Stride.Engine.Game)">
+            <summary>
+            Sets up a default 3D scene for the game, similar to creating an empty project through the editor.
+            </summary>
+            <remarks>
+            This method performs the following setup operations in sequence:<br />
+            1. Adds a default GraphicsCompositor to the game's SceneSystem and applies a clean UI stage.<br />
+            2. Adds a camera to the game and sets it up with a MouseLookCamera component.<br />
+            3. Adds a directional light to the game scene.<br />
+            4. Adds ground geometry to the game scene.
+            </remarks>
+            <param name="game">The Game instance for which the base 3D scene will be set up.</param>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.GameExtensions.Add2DGround(Stride.Engine.Game,System.String,System.Nullable{Stride.Core.Mathematics.Vector2},System.Boolean)">
+            <summary>
+            Adds a 2D ground entity to the specified game with optional name, size, and collider settings.
+            </summary>
+            <remarks>The ground entity is created using a cube primitive model and is suitable for 2D gameplay
+            scenarios. The default size and name are defined by <see cref="F:Stride.CommunityToolkit.Engine.GameDefaults.Default2DGroundSize"/> and <see
+            cref="F:Stride.CommunityToolkit.Engine.GameDefaults.DefaultGroundName"/>, respectively.</remarks>
+            <param name="game">The game instance to which the ground entity will be added.</param>
+            <param name="entityName">The name to assign to the ground entity. If null, a default name is used.</param>
+            <param name="size">The size of the ground entity in world units. If null, a default size is applied.</param>
+            <param name="includeCollider">Specifies whether a collider should be included with the ground entity. Set to <see langword="true"/> to add a
+            collider; otherwise, <see langword="false"/>.</param>
+            <returns>The newly created ground entity added to the game.</returns>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.GameExtensions.Add3DGround(Stride.Engine.Game,System.String,System.Nullable{Stride.Core.Mathematics.Vector2},System.Boolean)">
+            <summary>
+            Adds a 3D ground entity to the game.
+            </summary>
+            <param name="game">Game instance.</param>
+            <param name="entityName">Optional entity name; defaults to <see cref="F:Stride.CommunityToolkit.Engine.GameDefaults.DefaultGroundName"/>.</param>
+            <param name="size">Optional ground size; defaults to <see cref="F:Stride.CommunityToolkit.Engine.GameDefaults.Default3DGroundSize"/>.</param>
+            <param name="includeCollider">If true, attaches a <see cref="T:Stride.BepuPhysics.Definitions.Colliders.CompoundCollider"/>.</param>
+            <returns>The created ground <see cref="T:Stride.Engine.Entity"/>.</returns>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.GameExtensions.Create2DPrimitive(Stride.Games.IGame,Stride.CommunityToolkit.Rendering.ProceduralModels.Primitive2DModelType,Stride.CommunityToolkit.Bepu.Bepu2DPhysicsOptions)">
+            <summary>
+            Creates a 2D primitive entity and attaches a Bepu physics component as defined by <paramref name="options"/>.
+            </summary>
+        </member>
+        <member name="M:Stride.CommunityToolkit.Bepu.GameExtensions.Create3DPrimitive(Stride.Games.IGame,Stride.CommunityToolkit.Rendering.ProceduralModels.PrimitiveModelType,Stride.CommunityToolkit.Bepu.Bepu3DPhysicsOptions)">
+            <summary>
+            Creates a 3D primitive entity and attaches a Bepu physics component as defined by <paramref name="options"/>.
+            </summary>
+            <param name="game">The game instance.</param>
+            <param name="type">Which primitive shape to create.</param>
+            <param name="options">
+            Options for both the primitive geometry and physics.
+            If <c>null</c>, defaults will be used.
+            </param>
+            <returns>The newly created <see cref="T:Stride.Engine.Entity"/>.</returns>
+        </member>
+    </members>
+</doc>

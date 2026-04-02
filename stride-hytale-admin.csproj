@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
+    <StrideGraphicsApi>OpenGL</StrideGraphicsApi>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Stride.CommunityToolkit.Linux" Version="*-*" />
+    <PackageReference Include="Stride.CommunityToolkit.Bepu" Version="*-*" />
+    <PackageReference Include="Stride.CommunityToolkit.ImGui" Version="*-*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="assets/**/*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Effects/**/*.sdsl" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
