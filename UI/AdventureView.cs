@@ -678,14 +678,16 @@ public class AdventureView
         {
             if (node.Values.TryGetValue("dlg_entityNameText", out var nameText) && !string.IsNullOrEmpty(nameText))
                 result.Add(("Name", nameText));
-            else if (node.Values.TryGetValue("dlg_entityNameKey", out var name) && !string.IsNullOrEmpty(name))
-                result.Add(("Name", name));
 
             if (node.Values.TryGetValue("dlg_dialogText", out var dlgText) && !string.IsNullOrEmpty(dlgText))
             {
                 var preview = dlgText.Length > 30 ? dlgText[..30] + "..." : dlgText;
                 result.Add(("Text", preview));
             }
+
+            // Show step count if dialog has steps
+            if (node.Values.TryGetValue("dlg_stepCount", out var stepCount) && stepCount != "0")
+                result.Add(("Steps", stepCount));
         }
         else if (node.EntityPrefix == "loc")
         {

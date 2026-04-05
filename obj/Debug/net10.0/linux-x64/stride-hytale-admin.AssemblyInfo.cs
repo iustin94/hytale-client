@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("stride-hytale-admin")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ea6a53cd667673e98b6148e098c6727ae353ef0b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3eeef0f35baeb50300110c3b632da0c2dd85161a")]
 [assembly: System.Reflection.AssemblyProductAttribute("stride-hytale-admin")]
 [assembly: System.Reflection.AssemblyTitleAttribute("stride-hytale-admin")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
