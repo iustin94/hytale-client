@@ -6,6 +6,7 @@ using HytaleAdmin.Models.Api;
 using HytaleAdmin.Services;
 using HytaleAdmin.Rendering;
 using HytaleAdmin.UI.Components;
+using HytaleAdmin.UI.Components.Forms;
 using HytaleAdmin.UI.NodeEditor;
 using Stride.Input;
 
@@ -60,8 +61,10 @@ public class AdventureView
     // Tutorial guide
     private bool _showTutorial;
 
-    // Map picker + wizard
+    // Map picker + wizard + dialog editor
     private MapPickerDialog? _mapPicker;
+    private DialogStepsEditor? _dialogEditor;
+    private DialogFlowEditor? _dialogFlowEditor;
     private QuestWizard? _questWizard;
 
     private static readonly Vector4 DimColor = new(0.47f, 0.47f, 0.55f, 1f);
@@ -84,6 +87,8 @@ public class AdventureView
         _entityData = services.EntityData;
         _pluginState = new PluginPanelState(_client);
         _mapPicker = new MapPickerDialog(mapRenderer);
+        _dialogEditor = new DialogStepsEditor(_client);
+        _dialogFlowEditor = new DialogFlowEditor(_client);
         _questWizard = new QuestWizard(_client, _entityData, mapRenderer);
         _questWizard.OnQuestCreated = () => { _loaded = false; _selectedNode = null; };
     }
@@ -201,6 +206,7 @@ public class AdventureView
         DrawTutorialWindow();
         _mapPicker?.Draw();
         _questWizard?.Draw();
+        _dialogFlowEditor?.Draw(_input);
     }
 
     // ─── Data loading ────────────────────────────────────────────
@@ -506,6 +512,23 @@ public class AdventureView
                         _entityData,
                         null,
                         entity => OnAssignQuestGiverFromMap(capturedNode, entity));
+                }
+                ImGui.PopStyleColor(2);
+            }
+
+            // Dialog node: steps editor + flow editor button
+            if (_selectedNode.EntityPrefix == "dlg")
+            {
+                _dialogEditor?.SetDialog(_selectedNode.EntityId, _selectedNode.Values);
+                _dialogEditor?.Draw();
+
+                ImGui.Spacing();
+                ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.83f, 0.66f, 0.26f, 1f));
+                ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.1f, 0.1f, 0.12f, 1f));
+                if (ImGui.Button("Open Dialog Flow Editor", new Vector2(-1, 0)))
+                {
+                    var steps = _dialogEditor?.GetSteps() ?? new();
+                    _dialogFlowEditor?.Open(_selectedNode.EntityId, _selectedNode.Title, steps);
                 }
                 ImGui.PopStyleColor(2);
             }
