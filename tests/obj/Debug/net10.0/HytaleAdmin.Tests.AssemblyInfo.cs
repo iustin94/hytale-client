@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("HytaleAdmin.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+24247ec7445bcf4ff74255aa09c104b08097972f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ba0c4d8cde2a43ac97b1ec09d1163c0d144732a9")]
 [assembly: System.Reflection.AssemblyProductAttribute("HytaleAdmin.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("HytaleAdmin.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

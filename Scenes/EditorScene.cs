@@ -6,6 +6,9 @@ using HytaleAdmin.Models.Domain;
 using HytaleAdmin.Rendering;
 using HytaleAdmin.Services;
 using HytaleAdmin.UI;
+using HytaleAdmin.UI.CanvasView;
+using HytaleAdmin.UI.CanvasView.Adapters;
+using HytaleAdmin.UI.CanvasView.Presenters;
 using Stride.Core;
 using Stride.Core.Mathematics;
 using Stride.Engine;
@@ -14,6 +17,10 @@ using Stride.Input;
 
 namespace HytaleAdmin.Scenes;
 
+/// <summary>
+/// Thin scene — wires services, renderers, and UI.
+/// All logic delegated to dedicated services.
+/// </summary>
 public class EditorScene : IGameScene
 {
     private readonly ServiceContainer _services;
@@ -23,23 +30,20 @@ public class EditorScene : IGameScene
     private SelectionRenderer? _selectionRenderer;
     private EditorUI? _editorUi;
 
-    // Area selection state
+    // Services
+    private MapLoadingService? _mapLoader;
+    private AssetPlacementService? _placement;
+    private SpatialActionService? _spatialActions;
+    private UI.Components.MapActionDialog? _mapActionDialog;
+    private CanvasView? _canvasView;
+
+    // Input state
     private bool _areaSelecting;
     private Vector2 _areaStart;
     private bool _wasMouseDown;
-
-    // Right-click context menu state
     private Vector2 _rightClickWorldPos;
     private EntityDto? _rightClickEntity;
     private bool _contextMenuRequested;
-
-    // NPC type cache for spawn menu
-    private string[]? _npcTypes;
-    private bool _npcTypesLoading;
-    private string _npcTypeFilter = "";
-
-    // Map action dialog
-    private UI.Components.MapActionDialog? _mapActionDialog;
 
     public EditorScene(ServiceContainer services)
     {
@@ -55,360 +59,179 @@ public class EditorScene : IGameScene
         _editorUi = new EditorUI(services, _services,
             _mapRenderer, _entityRenderer, _selectionRenderer, LoadMapAsync);
 
-        // Wire context menu delegate + map action dialog
-        _editorUi.DrawMapContextMenu = () =>
+        // Canvas view — replaces EntityRenderer
+        _canvasView = new CanvasView(_mapRenderer);
+        _canvasView.RegisterPresenter("player", new PointEntityPresenter(
+            0xFF_3D45E8, 0xFF_FFFFFF, 5f, PointEntityPresenter.Shape.Circle,
+            e => $"Player: {e.Label}\nPosition: ({e.WorldX:F1}, {e.WorldY:F1}, {e.WorldZ:F1})"));
+        _canvasView.RegisterPresenter("npc", new PointEntityPresenter(
+            0xFF_FF8737, 0xFF_FF8737, 4f, PointEntityPresenter.Shape.Circle,
+            e => { var n = e as NpcMapEntity; return $"NPC: {e.Label}\nType: {n?.Dto.Type}\nPosition: ({e.WorldX:F1}, {e.WorldY:F1}, {e.WorldZ:F1})\nUUID: {e.Id}"; }));
+        _canvasView.RegisterPresenter("soundzone", new AreaEntityPresenter(
+            0x40_C5D150, 0x99_C5D150, 0xE6_C5D150,
+            e => { var z = e as SoundZoneMapEntity; return z != null ? $"Sound Zone: {e.Label}\nCenter: ({e.WorldX:F1}, {e.WorldY:F1}, {e.WorldZ:F1})\nSize: {z.MaxX - z.MinX:F0} x {z.MaxZ - z.MinZ:F0}\nInterval: {z.Dto.Interval}s" : e.Label; }));
+        _canvasView.RegisterPresenter("location", new PointEntityPresenter(
+            0xFF_D98D5B, 0xFF_D98D5B, 6f, PointEntityPresenter.Shape.Diamond,
+            e => $"Location: {e.Label}\nPosition: ({e.WorldX:F1}, {e.WorldY:F1}, {e.WorldZ:F1})"));
+        _canvasView.OnEntitySelected = entity =>
         {
-            DrawContextMenu();
-            _mapActionDialog?.Draw();
+            if (entity is NpcMapEntity npc) _services.Selection.SelectEntity(npc.Dto);
+            else if (entity is PlayerMapEntity player) _services.Selection.SelectPlayer(player.Dto);
+            else if (entity is SoundZoneMapEntity zone) _services.Selection.SelectZone(zone.Dto);
         };
-
-        // Wire events
-        _services.ApiClient.StatusChanged += msg => _editorUi.SetStatus(msg);
-        _services.ApiClient.RequestLogged += (method, url) => _editorUi.Log.LogRequest(method, url);
-        _services.ApiClient.ResponseLogged += (url, ok, detail) => _editorUi.Log.LogResponse(url, ok, detail);
-
-        _services.MapData.MapUpdated += () =>
-        {
-            _mapRenderer?.UpdateTexture(_services.MapData);
-        };
-
-        _services.EntityData.DataUpdated += () =>
-        {
-            _entityRenderer?.Refresh(_services.EntityData);
-        };
+        _editorUi.SetCanvasView(_canvasView);
 
         _mapActionDialog = new UI.Components.MapActionDialog(_mapRenderer, _services.ApiClient);
+        _editorUi.DrawMapContextMenu = () => { DrawContextMenu(); _mapActionDialog?.Draw(); };
 
-        // Load asset catalog and server info in background
+        // Events
+        _services.ApiClient.StatusChanged += msg => _editorUi.SetStatus(msg);
+        _services.ApiClient.RequestLogged += (m, u) => _editorUi.Log.LogRequest(m, u);
+        _services.ApiClient.ResponseLogged += (u, ok, d) => _editorUi.Log.LogResponse(u, ok, d);
+        _services.MapData.MapUpdated += () => _mapRenderer?.UpdateTexture(_services.MapData);
+        _services.EntityData.DataUpdated += () => RefreshCanvasEntities();
+
+        // Services
+        _mapLoader = new MapLoadingService(_services.ApiClient, _services.MapData, _mapRenderer, _services.EntityData);
+        _placement = new AssetPlacementService(_services.ApiClient, _services.MapData, _services.EntityData, _services.Config);
+        _placement.StatusChanged += msg => _editorUi?.SetStatus(msg);
+        _spatialActions = new SpatialActionService(_services.ApiClient, _services.MapData, _services.Config, _services.PluginSchemas);
+        _spatialActions.StatusChanged += msg => _editorUi?.SetStatus(msg);
+
         _ = _editorUi.LoadAssetsAsync();
-
-        // Auto-load map on startup
         _ = LoadMapAsync();
     }
 
     public void Update(GameTime time)
     {
-        // Flush any pending data updates on the main thread
         _services.MapData.FlushOnMainThread();
         _services.EntityData.FlushOnMainThread();
 
         var input = _services.Game.Input;
+        if (InputMap.IsPressed(input, InputAction.LoadMap)) _ = LoadMapAsync();
+        if (_mapRenderer == null) return;
 
-        // Keyboard shortcuts
-        if (InputMap.IsPressed(input, InputAction.LoadMap))
+        var mouseScreen = new Vector2(
+            input.MousePosition.X * _services.Game.Window.ClientBounds.Width,
+            input.MousePosition.Y * _services.Game.Window.ClientBounds.Height);
+        var worldPos = _mapRenderer.ScreenToWorld(mouseScreen);
+
+        if (worldPos != null)
         {
-            _ = LoadMapAsync();
+            int bx = (int)MathF.Floor(worldPos.Value.X);
+            int bz = (int)MathF.Floor(worldPos.Value.Y);
+            var block = _services.MapData.TryGetBlock(bx, bz);
+            _mapRenderer.CursorInfoText = block != null
+                ? $"X: {bx}  Z: {bz}  Y: {block.Y}  Block: {block.Block}"
+                : $"X: {bx}  Z: {bz}";
         }
 
-        if (InputMap.IsPressed(input, InputAction.RotateAsset))
-        {
-            _services.Selection.RotateAsset();
-        }
+        HandleAreaSelection(input, worldPos);
+        HandleClick(input, worldPos);
+        HandleRightClick(input, worldPos);
 
-        if (InputMap.IsPressed(input, InputAction.Cancel))
-        {
-            _services.Selection.DeselectAsset();
-            _selectionRenderer?.HideHover();
-
-            // Cancel trigger area definition
-            if (_editorUi?.Triggers?.IsDefiningArea == true)
-                _editorUi.Triggers.IsDefiningArea = false;
-        }
-
-        // Mouse world position
-        var screenSize = new Vector2(
-            _services.Game.GraphicsDevice.Presenter?.BackBuffer?.Width ?? 1280,
-            _services.Game.GraphicsDevice.Presenter?.BackBuffer?.Height ?? 720);
-        var mouseScreen = input.MousePosition * screenSize;
-        var worldPos = _mapRenderer?.ScreenToWorld(mouseScreen);
-
-        // Hover highlight with asset footprint
-        _selectionRenderer?.UpdateSelectedAsset(_services.Selection.SelectedAsset);
-        if (_services.Selection.SelectedAsset != null && worldPos != null)
+        if (worldPos != null && _services.Selection.SelectedAsset != null)
         {
             _selectionRenderer?.UpdateHoverHighlight(worldPos);
-            UpdateHoverInfo(worldPos.Value);
+            _selectionRenderer?.UpdateSelectedAsset(_services.Selection.SelectedAsset);
         }
         else
         {
             _selectionRenderer?.HideHover();
-            if (worldPos != null) UpdateHoverInfo(worldPos.Value);
         }
-
-        // Show cursor info on map panel bottom bar
-        var hovered = _services.Selection.HoveredBlock;
-        if (hovered != null)
-            _mapRenderer!.CursorInfoText = $"X: {hovered.X}  Z: {hovered.Z}  Y: {hovered.Y}  Block: {hovered.Block}";
-        else
-            _mapRenderer!.CursorInfoText = null;
-
-        // Area selection (shift+drag for sound zones or trigger areas)
-        HandleAreaSelection(input, worldPos);
-
-        // Click-to-place or click-to-select
-        HandleClick(input, worldPos);
-
-        // Right-click context menu
-        HandleRightClick(input, worldPos);
     }
+
+    // ─── Area selection ──────────────────────────────────────────
 
     private void HandleAreaSelection(InputManager input, Vector2? worldPos)
     {
-        if (worldPos == null) return;
+        if (_services.Selection.SelectedAsset?.Category != "sounds" || worldPos == null) return;
 
-        var asset = _services.Selection.SelectedAsset;
-        bool isSoundAsset = asset?.Category == "sounds";
-        bool isTriggerArea = _editorUi?.Triggers?.IsDefiningArea == true;
-
-        bool shouldStartArea = (isSoundAsset || isTriggerArea)
-            && InputMap.IsShiftDown(input)
-            && input.IsMouseButtonPressed(MouseButton.Left);
-
-        if (shouldStartArea)
-        {
-            _areaSelecting = true;
-            _areaStart = worldPos.Value;
-        }
+        if (InputMap.IsShiftDown(input) && input.IsMouseButtonPressed(MouseButton.Left))
+        { _areaSelecting = true; _areaStart = worldPos.Value; }
 
         if (_areaSelecting && input.IsMouseButtonDown(MouseButton.Left))
-        {
             _selectionRenderer?.UpdateAreaSelection(_areaStart, worldPos.Value);
-        }
 
         if (_areaSelecting && input.IsMouseButtonReleased(MouseButton.Left))
         {
             _areaSelecting = false;
             _selectionRenderer?.HideAreaSelection();
-
-            float minX = Math.Min(_areaStart.X, worldPos.Value.X);
-            float maxX = Math.Max(_areaStart.X, worldPos.Value.X);
-            float minZ = Math.Min(_areaStart.Y, worldPos.Value.Y);
-            float maxZ = Math.Max(_areaStart.Y, worldPos.Value.Y);
-
+            float minX = Math.Min(_areaStart.X, worldPos.Value.X), maxX = Math.Max(_areaStart.X, worldPos.Value.X);
+            float minZ = Math.Min(_areaStart.Y, worldPos.Value.Y), maxZ = Math.Max(_areaStart.Y, worldPos.Value.Y);
             if (maxX - minX > 2 || maxZ - minZ > 2)
             {
-                if (isTriggerArea && _editorUi?.Triggers != null)
+                var asset = _services.Selection.SelectedAsset;
+                if (asset != null)
                 {
-                    // Pass area to trigger panel
-                    _editorUi.Triggers.PendingArea = (minX, minZ, maxX, maxZ);
-                    _editorUi.Triggers.IsDefiningArea = false;
-                }
-                else if (isSoundAsset)
-                {
-                    // Original sound zone placement
-                    float cx = (minX + maxX) / 2f;
-                    float cz = (minZ + maxZ) / 2f;
+                    float cx = (minX + maxX) / 2f, cz = (minZ + maxZ) / 2f;
                     var block = _services.MapData.TryGetBlock((int)cx, (int)cz);
-                    float cy = block?.Y + 1 ?? 64;
-
                     _ = _services.ApiClient.StartAmbientAsync(new SoundAmbientRequest
                     {
-                        Sound = asset!.Id,
-                        World = _services.Config.WorldId,
-                        X = cx, Y = cy, Z = cz,
-                        MinX = minX, MinZ = minZ, MaxX = maxX, MaxZ = maxZ
+                        Sound = asset.Id, World = _services.Config.WorldId,
+                        X = cx, Y = block?.Y ?? 64, Z = cz,
+                        MinX = minX, MinZ = minZ, MaxX = maxX, MaxZ = maxZ, Interval = 5
                     });
                 }
             }
         }
     }
 
+    // ─── Click ───────────────────────────────────────────────────
+
     private void HandleClick(InputManager input, Vector2? worldPos)
     {
-        if (worldPos == null) return;
-        if (_areaSelecting) return;
-
-        var io = ImGui.GetIO();
         bool leftReleased = input.IsMouseButtonReleased(MouseButton.Left)
-                     || (!io.MouseDown[0] && _wasMouseDown);
-        _wasMouseDown = io.MouseDown[0];
+                            || (!input.IsMouseButtonDown(MouseButton.Left) && _wasMouseDown);
+        _wasMouseDown = input.IsMouseButtonDown(MouseButton.Left);
+        if (!leftReleased || _areaSelecting || worldPos == null) return;
+        if (_mapRenderer != null && _mapRenderer.IsPanning && _mapRenderer.PanDistance > 3) return;
 
-        if (!leftReleased) return;
-
-        // Left-click: place asset if selected, otherwise select entity
-        if (_services.Selection.SelectedAsset != null)
-        {
-            PlaceSelectedAsset(worldPos.Value);
-        }
+        var asset = _services.Selection.SelectedAsset;
+        if (asset != null)
+            _ = _placement?.PlaceAssetAsync(asset, worldPos.Value.X, worldPos.Value.Y);
         else
-        {
             TrySelectAtPosition(worldPos.Value);
-        }
-    }
-
-    private void PlaceSelectedAsset(Vector2 worldPos)
-    {
-        var asset = _services.Selection.SelectedAsset!;
-        var blockX = (int)MathF.Floor(worldPos.X);
-        var blockZ = (int)MathF.Floor(worldPos.Y);
-        var block = _services.MapData.TryGetBlock(blockX, blockZ);
-
-        if (block == null)
-        {
-            _editorUi?.SetStatus("No surface data — load map first");
-            return;
-        }
-
-        if (asset.Category == "sounds")
-        {
-            _ = _services.ApiClient.PlaySoundAsync(new SoundPlayRequest
-            {
-                Sound = asset.Id,
-                World = _services.Config.WorldId,
-                X = blockX + 0.5f, Y = block.Y + 1, Z = blockZ + 0.5f
-            });
-        }
-        else if (asset.Category == "npcs")
-        {
-            _ = SpawnEntityAsync(asset.Id, blockX + 0.5f, block.Y + 1, blockZ + 0.5f);
-        }
-        else
-        {
-            _ = PlaceAssetAsync(asset.Category, asset.Id, blockX + 0.5f, block.Y, blockZ + 0.5f, asset.Rotation);
-        }
-    }
-
-    private async Task SpawnEntityAsync(string type, float x, float y, float z)
-    {
-        var result = await _services.ApiClient.SpawnEntityAsync(new EntitySpawnRequest
-        {
-            Type = type,
-            World = _services.Config.WorldId,
-            X = x, Y = y, Z = z
-        });
-
-        if (result?.Success == true)
-        {
-            await _services.EntityData.PollAsync(_services.ApiClient, _services.Config);
-        }
-    }
-
-    private async Task PlaceAssetAsync(string category, string id, float x, float y, float z, int rotation = 0)
-    {
-        try
-        {
-            _editorUi?.SetStatus($"Placing {category}:{id}...");
-            Console.WriteLine($"[Place] {category}:{id} at ({x:F1},{y:F1},{z:F1}) world={_services.Config.WorldId}");
-
-            var result = await _services.ApiClient.PlaceAssetAsync(
-                category, id, _services.Config.WorldId, x, y, z, rotation);
-
-            if (result == null)
-            {
-                _editorUi?.SetStatus($"Place {category}:{id} — no response");
-                Console.WriteLine($"[Place] null result");
-            }
-            else if (result.Success)
-            {
-                _editorUi?.SetStatus($"Placed {category}:{id} — reloading map...");
-                Console.WriteLine($"[Place] success: {result.Message}");
-                await _services.EntityData.PollAsync(_services.ApiClient, _services.Config);
-                await LoadMapAsync();
-            }
-            else
-            {
-                var err = result.Errors?.FirstOrDefault() ?? result.Message ?? "unknown error";
-                _editorUi?.SetStatus($"Place failed: {err}");
-                Console.WriteLine($"[Place] failed: {err}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _editorUi?.SetStatus($"Place error: {ex.Message}");
-            Console.Error.WriteLine($"[Place] exception: {ex}");
-        }
     }
 
     private void TrySelectAtPosition(Vector2 worldPos)
     {
         const float threshold = 3f;
-
         foreach (var p in _services.EntityData.Players)
-        {
-            var dist = Vector2.Distance(new(p.X, p.Z), worldPos);
-            if (dist < threshold) { _services.Selection.SelectPlayer(p); return; }
-        }
-
+            if (Vector2.Distance(new(p.X, p.Z), worldPos) < threshold) { _services.Selection.SelectPlayer(p); return; }
         foreach (var e in _services.EntityData.Entities)
-        {
-            var dist = Vector2.Distance(new(e.X, e.Z), worldPos);
-            if (dist < threshold) { _services.Selection.SelectEntity(e); return; }
-        }
-
+            if (Vector2.Distance(new(e.X, e.Z), worldPos) < threshold) { _services.Selection.SelectEntity(e); return; }
         foreach (var z in _services.EntityData.SoundZones)
-        {
-            if (worldPos.X >= z.MinX && worldPos.X <= z.MaxX &&
-                worldPos.Y >= z.MinZ && worldPos.Y <= z.MaxZ)
-            {
-                _services.Selection.SelectZone(z);
-                return;
-            }
-        }
+            if (worldPos.X >= z.MinX && worldPos.X <= z.MaxX && worldPos.Y >= z.MinZ && worldPos.Y <= z.MaxZ)
+            { _services.Selection.SelectZone(z); return; }
+        _services.Selection.ClearMapSelection();
     }
+
+    // ─── Right-click ─────────────────────────────────────────────
 
     private void HandleRightClick(InputManager input, Vector2? worldPos)
     {
-        if (worldPos == null) return;
-
-        if (input.IsMouseButtonPressed(MouseButton.Right))
-        {
-            _rightClickWorldPos = worldPos.Value;
-
-            // Hit-test: find entity under cursor
-            _rightClickEntity = null;
-            const float threshold = 3f;
-            foreach (var e in _services.EntityData.Entities)
-            {
-                var dist = Vector2.Distance(new(e.X, e.Z), worldPos.Value);
-                if (dist < threshold)
-                {
-                    _rightClickEntity = e;
-                    break;
-                }
-            }
-
-            _contextMenuRequested = true;
-
-            // Ensure schemas are loaded
-            if (!_services.PluginSchemas.IsLoaded)
-            {
-                _ = _services.PluginSchemas.RefreshAsync().ContinueWith(t =>
-                {
-                    _services.EntityData.SpatialPluginIds =
-                        new List<string>(_services.PluginSchemas.GetSpatialPluginIds());
-                    _entityRenderer?.SetPresenters(_services.PluginSchemas.GetAllPresenters());
-                });
-            }
-        }
+        if (!input.IsMouseButtonPressed(MouseButton.Right) || worldPos == null) return;
+        _rightClickWorldPos = worldPos.Value;
+        _rightClickEntity = null;
+        const float threshold = 3f;
+        foreach (var e in _services.EntityData.Entities)
+            if (Vector2.Distance(new(e.X, e.Z), worldPos.Value) < threshold) { _rightClickEntity = e; break; }
+        _contextMenuRequested = true;
     }
 
-    /// <summary>
-    /// Called from EditorUI inside the map ImGui window to render the context menu popup.
-    /// </summary>
     public void DrawContextMenu()
     {
-        if (_contextMenuRequested)
-        {
-            ImGui.OpenPopup("map_context_menu");
-            _contextMenuRequested = false;
-        }
+        if (_contextMenuRequested) { ImGui.OpenPopup("map_context_menu"); _contextMenuRequested = false; }
 
         if (ImGui.BeginPopup("map_context_menu"))
         {
-            // Header
             if (_rightClickEntity != null)
-            {
-                var name = !string.IsNullOrEmpty(_rightClickEntity.Name)
-                    ? _rightClickEntity.Name : _rightClickEntity.Type ?? "Entity";
-                ImGui.TextDisabled($"Entity: {name}");
-            }
+                ImGui.TextDisabled($"Entity: {_rightClickEntity.Name ?? _rightClickEntity.Type ?? "Entity"}");
             else
-            {
                 ImGui.TextDisabled($"Position: {_rightClickWorldPos.X:F1}, {_rightClickWorldPos.Y:F1}");
-            }
             ImGui.Separator();
 
-            // Copy entity to clipboard
             if (_rightClickEntity != null)
             {
                 if (ImGui.MenuItem("Copy to Clipboard"))
@@ -419,7 +242,6 @@ public class EditorScene : IGameScene
                 ImGui.Separator();
             }
 
-            // Map actions via dialog
             if (ImGui.MenuItem("Spawn NPC"))
                 _mapActionDialog?.Open(new UI.Components.MapActions.SpawnNpcAction(_services.ApiClient));
             if (ImGui.MenuItem("Create Location"))
@@ -431,240 +253,53 @@ public class EditorScene : IGameScene
 
             ImGui.Separator();
 
-            // Plugin spatial actions
             if (_services.PluginSchemas.IsLoaded)
             {
-                var actions = _services.PluginSchemas.GetSpatialActions();
-                if (actions.Count == 0)
-                {
-                    ImGui.TextDisabled("No spatial actions available");
-                }
-                else
-                {
-                    foreach (var sa in actions)
-                    {
-                        if (ImGui.MenuItem($"{sa.PluginName}: {sa.Action.Label}"))
-                        {
-                            _ = ExecuteSpatialActionAsync(sa);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                ImGui.TextDisabled("Loading plugins...");
+                foreach (var sa in _services.PluginSchemas.GetSpatialActions())
+                    if (ImGui.MenuItem($"{sa.PluginName}: {sa.Action.Label}"))
+                        _ = _spatialActions?.ExecuteAsync(sa, _rightClickWorldPos.X, _rightClickWorldPos.Y, _rightClickEntity?.Name);
             }
 
             ImGui.EndPopup();
         }
     }
 
-    private void DrawSpawnNpcMenu()
+    // ─── Map loading ─────────────────────────────────────────────
+
+    private void RefreshCanvasEntities()
     {
-        if (ImGui.BeginMenu("Spawn NPC"))
+        if (_canvasView == null || _services.EntityData == null) return;
+
+        var entities = new List<IMapEntity>();
+        foreach (var p in _services.EntityData.Players)
+            entities.Add(new PlayerMapEntity(p));
+        foreach (var e in _services.EntityData.Entities)
+            entities.Add(new NpcMapEntity(e));
+        foreach (var z in _services.EntityData.SoundZones)
+            entities.Add(new SoundZoneMapEntity(z));
+        foreach (var pe in _services.EntityData.PluginEntities)
         {
-            // Load types on first open
-            if (_npcTypes == null && !_npcTypesLoading)
-            {
-                _npcTypesLoading = true;
-                _ = Task.Run(async () =>
-                {
-                    var types = await _services.ApiClient.GetEntityTypesAsync(_services.Config.WorldId);
-                    _npcTypes = types?.Where(t => t != "HyCitizens").ToArray() ?? [];
-                    _npcTypesLoading = false;
-                });
-            }
-
-            if (_npcTypesLoading)
-            {
-                ImGui.TextDisabled("Loading NPC types...");
-            }
-            else if (_npcTypes == null || _npcTypes.Length == 0)
-            {
-                ImGui.TextDisabled("No NPC types available");
-            }
-            else
-            {
-                // Search filter
-                ImGui.SetNextItemWidth(200);
-                ImGui.InputText("##npcTypeFilter", ref _npcTypeFilter, 128);
-
-                ImGui.Separator();
-
-                // Show filtered types (limit to 20 to avoid huge menus)
-                int shown = 0;
-                var filterLower = _npcTypeFilter.ToLowerInvariant();
-                foreach (var npcType in _npcTypes)
-                {
-                    if (!string.IsNullOrEmpty(_npcTypeFilter) &&
-                        !npcType.Contains(filterLower, StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    if (ImGui.MenuItem(npcType))
-                    {
-                        _ = SpawnNpcAtAsync(npcType, _rightClickWorldPos);
-                    }
-
-                    if (++shown >= 20)
-                    {
-                        ImGui.TextDisabled($"... and {_npcTypes.Length - shown} more (use filter)");
-                        break;
-                    }
-                }
-            }
-
-            ImGui.EndMenu();
+            if (pe.Id.StartsWith("loc:") && (pe.X != 0 || pe.Z != 0))
+                entities.Add(new LocationMapEntity(pe));
         }
+
+        _canvasView.SetEntities(entities);
     }
 
-    private async Task SpawnNpcAtAsync(string npcType, System.Numerics.Vector2 worldPos)
-    {
-        var blockX = (int)MathF.Floor(worldPos.X);
-        var blockZ = (int)MathF.Floor(worldPos.Y);
-        var block = _services.MapData.TryGetBlock(blockX, blockZ);
-
-        float y = block != null ? block.Y + 1 : 0;
-        bool needsServerY = block == null;
-
-        _editorUi?.SetStatus($"Spawning {npcType}...");
-
-        // If no map data, ask server for surface height
-        if (needsServerY)
-        {
-            try
-            {
-                var resp = await _services.ApiClient.GetSurfaceAsync(
-                    _services.Config.WorldId, blockX, blockZ, 0);
-                if (resp?.Surface != null && resp.Surface.Length > 0)
-                    y = resp.Surface[0].Y + 1;
-                else
-                    y = 64;
-            }
-            catch { y = 64; }
-        }
-
-        var result = await _services.ApiClient.SpawnEntityAsync(new EntitySpawnRequest
-        {
-            Type = npcType,
-            World = _services.Config.WorldId,
-            X = blockX + 0.5f, Y = y, Z = blockZ + 0.5f
-        });
-
-        if (result?.Success == true)
-        {
-            _editorUi?.SetStatus($"Spawned {npcType} at ({blockX}, {block.Y + 1}, {blockZ})");
-            await _services.EntityData.PollAsync(_services.ApiClient, _services.Config);
-        }
-        else
-        {
-            _editorUi?.SetStatus($"Spawn failed: {result?.Error ?? "Unknown error"}");
-        }
-    }
-
-    private async Task CreateLocationAtAsync(System.Numerics.Vector2 worldPos)
-    {
-        string id = $"location_{DateTime.UtcNow.Ticks % 100000}";
-        try
-        {
-            var result = await _services.ApiClient.ExecutePluginActionAsync(
-                "hyadventure", "createLocation", null,
-                new Dictionary<string, string>
-                {
-                    ["id"] = id,
-                    ["label"] = $"Location ({worldPos.X:F0}, {worldPos.Y:F0})",
-                    ["x"] = worldPos.X.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
-                    ["y"] = "64",
-                    ["z"] = worldPos.Y.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
-                    ["radius"] = "5.0",
-                });
-            _editorUi?.SetStatus(result?.Success == true
-                ? $"Location created: {id}"
-                : $"Failed: {string.Join(", ", result?.Errors ?? ["Unknown error"])}");
-        }
-        catch (Exception ex)
-        {
-            _editorUi?.SetStatus($"Error: {ex.Message}");
-        }
-    }
-
-    private async Task ExecuteSpatialActionAsync(Services.SpatialAction sa)
-    {
-        float x = _rightClickWorldPos.X;
-        float z = _rightClickWorldPos.Y; // Note: worldPos.Y is Z in world space
-        float defaultRadius = 20f;
-        var surfaceBlock = _services.MapData.TryGetBlock((int)MathF.Floor(x), (int)MathF.Floor(z));
-        float surfaceY = surfaceBlock?.Y ?? 70f;
-
-        var parameters = new Dictionary<string, string>();
-        var spatialFields = sa.SpatialFields;
-
-        // Auto-fill from schema-declared spatial field semantics
-        foreach (var group in sa.Action.Groups)
-        {
-            foreach (var field in group.Fields)
-            {
-                if (spatialFields.TryGetValue(field.Id, out var semantic))
-                {
-                    parameters[field.Id] = ResolveSemantic(semantic, x, z, surfaceY);
-                }
-                else if (field.EnumValues is { Length: > 0 })
-                {
-                    parameters[field.Id] = field.EnumValues[0];
-                }
-            }
-        }
-
-        var result = await _services.ApiClient.ExecutePluginActionAsync(
-            sa.PluginId, sa.Action.Id, null, parameters);
-
-        if (result?.Success == true)
-        {
-            _editorUi?.SetStatus($"{sa.Action.Label} created successfully");
-            await _services.EntityData.PollAsync(_services.ApiClient, _services.Config);
-        }
-    }
-
-    private string ResolveSemantic(string semantic, float x, float z, float surfaceY)
-    {
-        if (semantic == "x") return x.ToString("F1");
-        if (semantic == "z") return z.ToString("F1");
-        if (semantic == "surfaceY") return surfaceY.ToString("F1");
-        if (semantic == "worldId") return _services.Config.WorldId;
-        if (semantic == "autoName")
-            return _rightClickEntity != null
-                ? $"Region: {_rightClickEntity.Name ?? _rightClickEntity.Type}"
-                : $"Region at {x:F0},{z:F0}";
-        if (semantic.StartsWith("default:")) return semantic[8..];
-        return "";
-    }
-
-    private void UpdateHoverInfo(Vector2 worldPos)
-    {
-        var blockX = (int)MathF.Floor(worldPos.X);
-        var blockZ = (int)MathF.Floor(worldPos.Y);
-        var block = _services.MapData.TryGetBlock(blockX, blockZ);
-        _services.Selection.HoveredBlock = block;
-    }
+    public void Unload(Scene rootScene) { }
 
     private async Task LoadMapAsync()
     {
-        var config = _services.Config;
-        var surface = await _services.ApiClient.GetSurfaceAsync(
-            config.WorldId, config.CenterX, config.CenterZ, config.Radius);
-        if (surface != null)
-        {
-            _services.MapData.Merge(surface);
-            _mapRenderer?.LookAt(config.CenterX, config.CenterZ);
-            await _services.EntityData.PollAsync(_services.ApiClient, config);
-            _services.EntityData.StartPolling(_services.ApiClient, config);
-        }
-    }
+        if (_mapLoader == null) return;
+        _editorUi?.SetStatus("Loading map...");
+        await _mapLoader.LoadAsync(_services.Config);
+        _editorUi?.SetStatus("Map loaded");
 
-    public void Unload(Scene rootScene)
-    {
-        _services.EntityData.StopPolling();
-        _mapRenderer?.Clear();
-        _entityRenderer?.Clear();
-        _selectionRenderer?.Clear();
+        if (!_services.PluginSchemas.IsLoaded)
+        {
+            await _services.PluginSchemas.RefreshAsync();
+            _entityRenderer?.SetPresenters(_services.PluginSchemas.GetAllPresenters());
+            _services.EntityData.SpatialPluginIds = _services.PluginSchemas.GetSpatialPluginIds().ToList();
+        }
     }
 }

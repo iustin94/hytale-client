@@ -17,6 +17,8 @@ public class EditorUI : GameSystem
     private readonly MapRenderer _mapRenderer;
     private readonly EntityRenderer _entityRenderer;
     private readonly SelectionRenderer _selectionRenderer;
+    private CanvasView.CanvasView? _canvasView;
+    private CanvasView.CanvasEntityList? _canvasEntityList;
 
     private HeaderBar? _headerBar;
     private AssetBrowserPanel? _assetBrowser;
@@ -40,6 +42,11 @@ public class EditorUI : GameSystem
     public Action? DrawMapContextMenu { get; set; }
 
     public TriggerPanel? Triggers => _triggerPanel;
+    public void SetCanvasView(CanvasView.CanvasView canvasView)
+    {
+        _canvasView = canvasView;
+        _canvasEntityList = new CanvasView.CanvasEntityList(canvasView, _mapRenderer);
+    }
     public LogPanel Log => _logPanel;
 
     public EditorUI(IServiceRegistry services, ServiceContainer appServices,
@@ -176,11 +183,9 @@ public class EditorUI : GameSystem
         float panelWidth = 270f;
         var avail = ImGui.GetContentRegionAvail();
 
-        // Left panel: Assets / Triggers
+        // Left panel: Canvas entity list
         ImGui.BeginChild("LeftPanel", new System.Numerics.Vector2(panelWidth, avail.Y), ImGuiChildFlags.Borders);
-
-        _projectTree?.Draw();
-
+        _canvasEntityList?.Draw(panelWidth, avail.Y);
         ImGui.EndChild();
 
         ImGui.SameLine();
@@ -196,12 +201,10 @@ public class EditorUI : GameSystem
         ImGui.BeginChild("CenterPanel", new System.Numerics.Vector2(centerWidth, mapHeight),
             ImGuiChildFlags.Borders, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
 
-        var drawList = _mapRenderer.Draw();
+        _canvasView!.Draw(centerWidth, mapHeight, _services.Game.Input);
+        var drawList = ImGui.GetWindowDrawList();
         _selectionRenderer.DrawOverlays(drawList);
-        _entityRenderer.DrawOverlays(drawList);
-
-        if (_triggerPanel != null)
-            DrawTriggerZones(drawList);
+        if (_triggerPanel != null) DrawTriggerZones(drawList);
 
         DrawMapContextMenu?.Invoke();
 
