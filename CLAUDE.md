@@ -118,6 +118,75 @@ All UI lives in a single full-screen `UIComponent` entity. Layout is a `Grid` wi
 | GET | `/api/commands/list` | List commands |
 | POST | `/api/commands/execute` | Execute command |
 
+## Generic Reusable Components
+
+These components are built with SOLID principles and should be reused/extended rather than duplicated:
+
+### Node Editor (`UI/NodeEditor/`)
+- `NodeEditor<TNode>` — generic graph canvas with pan/zoom, bezier links, drag-to-connect
+- `INode` — minimal interface: Id, NodeType, Title, Subtitle, Position, Ports
+- `IGraphBuilderStrategy` — builds graph definitions from plugin schemas dynamically
+- `SchemaGraphBuilder` — default strategy reading `graphHints` from schema
+- `IContextMenuProvider<TNode>` — externally defined right-click menus
+- `PortTypeMap` — type-safe connection rules between port types
+- `NodeStyle` — per-node-type visual config
+- `GraphLayoutState` — persistence of node positions + pan/zoom to `~/.hytale-admin/`
+
+### Tree View (`UI/Components/`)
+- `TreeView<TItem>` — generic tree with search, selection, expand/collapse, context menu
+- `ITreeDataProvider<TItem>` — strategy for mapping any data to tree hierarchy
+- `ITreeContextMenu<TItem>` — right-click menu for tree items
+
+### Map Picker (`UI/Components/`)
+- `MapPickerDialog` — coordinate/entity picker with own pan/zoom state
+- Uses `MapRenderer` texture data without interfering with main map state
+
+### Rendering
+- `IPluginMapPresenter` — strategy for rendering plugin entities on map
+- `EntityRenderer` — delegates plugin entity rendering to presenters
+
+## SOLID Architecture Notes
+
+### What Works Well
+- **Generic components** (NodeEditor, TreeView, MapPicker) use interfaces + strategy pattern
+- **ServiceRegistry** (hytale-plugin) enables dependency inversion between plugins
+- **Schema-driven rendering** — graph nodes, forms, and actions are all data-driven from server schemas
+- **Event-driven updates** — EntityDataService, SelectionService use events for decoupling
+
+### Known Technical Debt — Address When Modifying These Areas
+
+**Form field rendering duplicated in 3 places:**
+- `PluginView.RenderWidget()`, `PluginPanel.DrawField()`, `AdventureView.DrawActionFormField()` / `DrawDetailField()`
+- Extract to `UI/Framework/FieldRenderer.cs` with static methods per field type
+
+**Color constants scattered across 15+ files:**
+- Every UI class declares its own `DimColor`, `AccentColor`, `SaveColor`, etc.
+- Extract to `UI/Framework/UIColors.cs` as single source of truth
+
+**HytaleApiClient is a monolith (40+ methods):**
+- Should be split into domain interfaces: `IMapApi`, `IEntityApi`, `IPlayerApi`, `ISoundApi`, `IPluginApi`
+- `HytaleApiClient` implements all interfaces for backward compatibility
+
+**Error handling inconsistent:**
+- API methods silently return null on failure — no error context
+- Consider `Result<T>` pattern: `record Result<T>(bool Success, T? Value, string? Error)`
+
+**EditorUI hard-codes all panels:**
+- ViewMode enum with switch-case dispatching
+- Should use `IPanel` interface with data-driven mode definitions
+
+### Hexa.NET.ImGui Quirks
+- `io.MouseDown[1]` (right-click) is NOT forwarded to ImGui by Stride's integration — use `Stride.Input.InputManager.IsMouseButtonPressed(MouseButton.Right)` instead
+- `ImGui.IsMouseClicked()`, `ImGui.IsMouseDoubleClicked()`, `ImGui.GetKeyData()` do NOT exist — use `io.MouseDoubleClicked[0]` or manual edge detection
+- `ImGui.BeginMenu()` only works inside popup/menubar contexts — use `ImGui.Selectable()` inside regular `Begin()` windows for custom menus
+- ImGui popups (`OpenPopup`/`BeginPopup`) flicker with right-click — use manual floating `Begin()` windows with frame-age dismiss guard instead
+
+### Cross-Plugin Architecture (hytale-plugin core)
+- `ServiceRegistry` — generic `Register<T>/Get<T>` for cross-plugin service discovery
+- `QuestGiverProvider` — interface in core, implemented by hytale-adventure, consumed by HyCitizens
+- `NpcRoleManager` — interface for role regeneration, implemented by HyCitizens
+- No direct dependencies between adventure and citizens plugins — both depend only on core interfaces
+
 ## Reference Implementation
 
 The `../hytale-map/` Hugo site is the feature reference. Key files:

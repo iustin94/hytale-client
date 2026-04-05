@@ -25,7 +25,9 @@ public class AppManager
             EntityData = new EntityDataService(),
             Selection = new SelectionService(),
             Config = config,
-            Game = game
+            Game = game,
+            PluginSchemas = new PluginSchemaCache(apiClient),
+            Clipboard = new ClipboardService()
         };
     }
 

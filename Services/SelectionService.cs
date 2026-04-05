@@ -30,6 +30,28 @@ public class SelectionService
         SelectionChanged?.Invoke();
     }
 
+    public void UpdateAssetSize(int sizeX, int sizeZ)
+    {
+        if (SelectedAsset != null)
+        {
+            SelectedAsset = SelectedAsset with { SizeX = sizeX, SizeZ = sizeZ };
+            SelectionChanged?.Invoke();
+        }
+    }
+
+    public void RotateAsset()
+    {
+        if (SelectedAsset != null)
+        {
+            int newRot = (SelectedAsset.Rotation + 90) % 360;
+            // Swap X/Z sizes on 90/270 rotations
+            SelectedAsset = newRot % 180 == 0
+                ? SelectedAsset with { Rotation = newRot }
+                : SelectedAsset with { Rotation = newRot, SizeX = SelectedAsset.SizeZ, SizeZ = SelectedAsset.SizeX };
+            SelectionChanged?.Invoke();
+        }
+    }
+
     public void DeselectAsset()
     {
         SelectedAsset = null;

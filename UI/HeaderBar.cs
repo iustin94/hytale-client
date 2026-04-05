@@ -157,6 +157,24 @@ public class HeaderBar
 
     }
 
+    /// <summary>
+    /// Draws a minimal header for plugin mode — just connection status and status text.
+    /// </summary>
+    public void DrawMinimal()
+    {
+        var connColor = _connected ? ConnectedColor : DisconnectedColor;
+        ImGui.TextColored(connColor, _connected ? "●" : "○");
+        ImGui.SameLine();
+
+        if (_serverInfo != null)
+        {
+            ImGui.TextColored(StatusColor, $"{_serverInfo.PlayerCount}P");
+            ImGui.SameLine();
+        }
+
+        ImGui.TextColored(StatusColor, _statusText);
+    }
+
     public async Task LoadEntityTypesAsync(HytaleApiClient api, EditorConfig config)
     {
         _entityTypes = await api.GetEntityTypesAsync(config.WorldId);

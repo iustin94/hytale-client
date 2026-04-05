@@ -62,7 +62,6 @@ public class MapDataService
 
     private static (byte r, byte g, byte b) GetFallbackColor(string blockId)
     {
-        // Prefix-match lookup for common block types
         if (blockId.StartsWith("Soil_Grass")) return (90, 140, 60);
         if (blockId.StartsWith("Soil_Snow")) return (230, 235, 240);
         if (blockId.StartsWith("Soil_Gravel")) return (140, 120, 100);
@@ -80,7 +79,6 @@ public class MapDataService
         if (blockId.StartsWith("Ice")) return (170, 210, 240);
         if (blockId.StartsWith("Grass")) return (85, 140, 55);
 
-        // Hash fallback for unknown blocks
         var hash = blockId.GetHashCode();
         return (
             (byte)(60 + Math.Abs(hash % 140)),

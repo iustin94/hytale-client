@@ -9,5 +9,6 @@ public enum InputAction
     Place,
     Cancel,
     LoadMap,
+    RotateAsset,
     Quit
 }

@@ -11,6 +11,10 @@ public class EntityDataService : IDisposable
     public PlayerDto[] Players { get; private set; } = [];
     public EntityDto[] Entities { get; private set; } = [];
     public SoundZoneDto[] SoundZones { get; private set; } = [];
+    public PluginEntitySummaryDto[] PluginEntities { get; private set; } = [];
+
+    /// <summary>Plugin IDs to poll for spatial entities (populated by PluginSchemaCache).</summary>
+    public List<string> SpatialPluginIds { get; set; } = new();
 
     public event Action? DataUpdated;
 
@@ -25,6 +29,16 @@ public class EntityDataService : IDisposable
         Players = playersTask.Result ?? [];
         Entities = entitiesTask.Result ?? [];
         SoundZones = zonesTask.Result ?? [];
+
+        // Poll plugin entities (soundscapes etc.)
+        var pluginEntities = new List<PluginEntitySummaryDto>();
+        foreach (var pluginId in SpatialPluginIds)
+        {
+            var resp = await api.GetPluginEntitiesAsync(pluginId);
+            if (resp?.Data != null)
+                pluginEntities.AddRange(resp.Data);
+        }
+        PluginEntities = pluginEntities.ToArray();
 
         _pendingUpdate = true;
     }

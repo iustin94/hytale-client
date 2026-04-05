@@ -9,6 +9,8 @@ using Stride.Games;
 
 namespace HytaleAdmin.UI;
 
+public enum ViewMode { Map, Plugins, Ambience, Adventure }
+
 public class EditorUI : GameSystem
 {
     private readonly ServiceContainer _services;
@@ -18,14 +20,24 @@ public class EditorUI : GameSystem
 
     private HeaderBar? _headerBar;
     private AssetBrowserPanel? _assetBrowser;
+    private ProjectTreePanel? _projectTree;
+    private AmbienceBrowserPanel? _ambienceBrowser;
     private InspectorPanel? _inspector;
     private TriggerPanel? _triggerPanel;
+    private PluginView? _pluginView;
+    private AdventureView? _adventureView;
     private LogPanel _logPanel = new();
 
-    // Left panel tab state
-    private int _leftTab; // 0 = Assets, 1 = Triggers
+    // View mode: Map or Plugins
+    private ViewMode _viewMode = ViewMode.Map;
+
+    // Left panel tab state (map mode only)
+    private int _leftTab; // 0 = World Objects, 1 = Assets, 2 = Triggers
 
     private ImGuiSystem? _imGui;
+
+    /// <summary>Set by EditorScene to render the right-click context menu inside the map window.</summary>
+    public Action? DrawMapContextMenu { get; set; }
 
     public TriggerPanel? Triggers => _triggerPanel;
     public LogPanel Log => _logPanel;
@@ -42,8 +54,12 @@ public class EditorUI : GameSystem
 
         _headerBar = new HeaderBar(appServices, loadMapCallback);
         _assetBrowser = new AssetBrowserPanel(appServices);
+        _projectTree = new ProjectTreePanel(appServices, mapRenderer);
+        _ambienceBrowser = new AmbienceBrowserPanel(appServices);
         _inspector = new InspectorPanel(appServices);
         _triggerPanel = new TriggerPanel(appServices);
+        _pluginView = new PluginView(appServices);
+        _adventureView = new AdventureView(appServices, mapRenderer);
 
         Game.GameSystems.Add(this);
         Enabled = true;
@@ -84,46 +100,92 @@ public class EditorUI : GameSystem
 
     private void Draw()
     {
-        // Header region
-        _headerBar?.Draw();
+        // ─── Header: View mode toggle + header bar ────────────────
+        DrawViewModeToggle();
+        ImGui.SameLine();
+
+        if (_viewMode == ViewMode.Map)
+            _headerBar?.Draw();
+        else
+            _headerBar?.DrawMinimal();
+
         ImGui.Separator();
 
-        // Calculate panel sizes
-        float panelWidth = 270f;
-        var avail = ImGui.GetContentRegionAvail();
+        // ─── Body: depends on view mode ───────────────────────────
+        switch (_viewMode)
+        {
+            case ViewMode.Map: DrawMapMode(); break;
+            case ViewMode.Plugins: DrawPluginMode(); break;
+            case ViewMode.Ambience: DrawAmbienceMode(); break;
+            case ViewMode.Adventure: DrawAdventureMode(); break;
+        }
+    }
 
-        // ─── Left panel: Assets / Triggers ────────────────────────
+    private static readonly System.Numerics.Vector4 ButtonTextColor = new(0.10f, 0.10f, 0.12f, 1f);
 
-        ImGui.BeginChild("LeftPanel", new System.Numerics.Vector2(panelWidth, avail.Y), ImGuiChildFlags.Borders);
-
-        // Tab buttons for left panel
-        var accentColor = new System.Numerics.Vector4(0.91f, 0.27f, 0.38f, 1f);
-        var triggerColor = new System.Numerics.Vector4(0.80f, 0.60f, 0.20f, 1f);
+    private void DrawViewModeToggle()
+    {
+        var mapColor = new System.Numerics.Vector4(0.91f, 0.27f, 0.38f, 1f);
+        var pluginColor = new System.Numerics.Vector4(0.40f, 0.70f, 0.95f, 1f);
         var defaultBtnColor = ImGui.GetStyle().Colors[(int)ImGuiCol.Button];
 
-        ImGui.PushStyleColor(ImGuiCol.Button, _leftTab == 0 ? accentColor : defaultBtnColor);
-        if (ImGui.SmallButton("Assets##ltab")) _leftTab = 0;
+        bool isMap = _viewMode == ViewMode.Map;
+        ImGui.PushStyleColor(ImGuiCol.Button, isMap ? mapColor : defaultBtnColor);
+        if (isMap) ImGui.PushStyleColor(ImGuiCol.Text, ButtonTextColor);
+        if (ImGui.SmallButton("Map")) _viewMode = ViewMode.Map;
+        if (isMap) ImGui.PopStyleColor();
         ImGui.PopStyleColor();
 
         ImGui.SameLine();
 
-        ImGui.PushStyleColor(ImGuiCol.Button, _leftTab == 1 ? triggerColor : defaultBtnColor);
-        if (ImGui.SmallButton("Triggers##ltab")) _leftTab = 1;
+        bool isPlugins = _viewMode == ViewMode.Plugins;
+        ImGui.PushStyleColor(ImGuiCol.Button, isPlugins ? pluginColor : defaultBtnColor);
+        if (isPlugins) ImGui.PushStyleColor(ImGuiCol.Text, ButtonTextColor);
+        if (ImGui.SmallButton("Plugins")) _viewMode = ViewMode.Plugins;
+        if (isPlugins) ImGui.PopStyleColor();
         ImGui.PopStyleColor();
 
-        ImGui.Separator();
+        ImGui.SameLine();
 
-        if (_leftTab == 0)
-            _assetBrowser?.Draw();
-        else
-            _triggerPanel?.Draw();
+        var ambienceColor = new System.Numerics.Vector4(0.31f, 0.80f, 0.77f, 1f);
+        bool isAmbience = _viewMode == ViewMode.Ambience;
+        ImGui.PushStyleColor(ImGuiCol.Button, isAmbience ? ambienceColor : defaultBtnColor);
+        if (isAmbience) ImGui.PushStyleColor(ImGuiCol.Text, ButtonTextColor);
+        if (ImGui.SmallButton("Ambience")) _viewMode = ViewMode.Ambience;
+        if (isAmbience) ImGui.PopStyleColor();
+        ImGui.PopStyleColor();
+
+        ImGui.SameLine();
+
+        var adventureColor = new System.Numerics.Vector4(0.85f, 0.55f, 0.20f, 1f);
+        bool isAdventure = _viewMode == ViewMode.Adventure;
+        ImGui.PushStyleColor(ImGuiCol.Button, isAdventure ? adventureColor : defaultBtnColor);
+        if (isAdventure) ImGui.PushStyleColor(ImGuiCol.Text, ButtonTextColor);
+        if (ImGui.SmallButton("Adventure")) _viewMode = ViewMode.Adventure;
+        if (isAdventure) ImGui.PopStyleColor();
+        ImGui.PopStyleColor();
+
+        ImGui.SameLine();
+        ImGui.Text("|");
+    }
+
+    // ─── Map Mode (original layout) ──────────────────────────────
+
+    private void DrawMapMode()
+    {
+        float panelWidth = 270f;
+        var avail = ImGui.GetContentRegionAvail();
+
+        // Left panel: Assets / Triggers
+        ImGui.BeginChild("LeftPanel", new System.Numerics.Vector2(panelWidth, avail.Y), ImGuiChildFlags.Borders);
+
+        _projectTree?.Draw();
 
         ImGui.EndChild();
 
         ImGui.SameLine();
 
-        // ─── Center column: Map + Log ─────────────────────────────
-
+        // Center column: Map + Log
         float centerWidth = avail.X - panelWidth * 2 - ImGui.GetStyle().ItemSpacing.X * 2;
         float logHeight = 150f;
         float spacing = ImGui.GetStyle().ItemSpacing.Y;
@@ -131,7 +193,6 @@ public class EditorUI : GameSystem
 
         ImGui.BeginGroup();
 
-        // Map view
         ImGui.BeginChild("CenterPanel", new System.Numerics.Vector2(centerWidth, mapHeight),
             ImGuiChildFlags.Borders, ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
 
@@ -142,9 +203,10 @@ public class EditorUI : GameSystem
         if (_triggerPanel != null)
             DrawTriggerZones(drawList);
 
+        DrawMapContextMenu?.Invoke();
+
         ImGui.EndChild();
 
-        // Log panel
         ImGui.BeginChild("LogPanel", new System.Numerics.Vector2(centerWidth, logHeight), ImGuiChildFlags.Borders);
         _logPanel.Draw();
         ImGui.EndChild();
@@ -153,10 +215,52 @@ public class EditorUI : GameSystem
 
         ImGui.SameLine();
 
-        // ─── Right panel: Inspector ───────────────────────────────
-
+        // Right panel: Inspector
         ImGui.BeginChild("RightPanel", new System.Numerics.Vector2(panelWidth, avail.Y), ImGuiChildFlags.Borders);
         _inspector?.Draw();
+        ImGui.EndChild();
+    }
+
+    // ─── Plugin Mode (full-width) ────────────────────────────────
+
+    private void DrawPluginMode()
+    {
+        var avail = ImGui.GetContentRegionAvail();
+        float logHeight = 150f;
+
+        // Plugin view takes the full width, with log below
+        float contentHeight = avail.Y - logHeight - ImGui.GetStyle().ItemSpacing.Y;
+
+        _pluginView?.Draw(avail.X, avail.Y, logHeight);
+
+        // Log panel
+        ImGui.BeginChild("PluginLogPanel", new System.Numerics.Vector2(avail.X, logHeight), ImGuiChildFlags.Borders);
+        _logPanel.Draw();
+        ImGui.EndChild();
+    }
+
+    private void DrawAmbienceMode()
+    {
+        var avail = ImGui.GetContentRegionAvail();
+        float logHeight = 150f;
+        float contentHeight = avail.Y - logHeight - ImGui.GetStyle().ItemSpacing.Y;
+
+        _ambienceBrowser?.Draw(avail.X, contentHeight);
+
+        ImGui.BeginChild("AmbienceLogPanel", new System.Numerics.Vector2(avail.X, logHeight), ImGuiChildFlags.Borders);
+        _logPanel.Draw();
+        ImGui.EndChild();
+    }
+
+    private void DrawAdventureMode()
+    {
+        var avail = ImGui.GetContentRegionAvail();
+        float logHeight = 150f;
+
+        _adventureView?.Draw(avail.X, avail.Y, logHeight);
+
+        ImGui.BeginChild("AdventureLogPanel", new System.Numerics.Vector2(avail.X, logHeight), ImGuiChildFlags.Borders);
+        _logPanel.Draw();
         ImGui.EndChild();
     }
 
@@ -192,7 +296,6 @@ public class EditorUI : GameSystem
             drawList.AddRectFilled(new System.Numerics.Vector2(x1, y1), new System.Numerics.Vector2(x2, y2), fillU32);
             drawList.AddRect(new System.Numerics.Vector2(x1, y1), new System.Numerics.Vector2(x2, y2), borderU32);
 
-            // Label
             var labelU32 = ImGui.ColorConvertFloat4ToU32(border with { W = 0.9f });
             drawList.AddText(new System.Numerics.Vector2(x1 + 2, y1 + 1), labelU32, trigger.Name);
         }

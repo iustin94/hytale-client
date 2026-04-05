@@ -46,6 +46,11 @@ public class MapRenderer
     public float PanDistance { get; private set; }
     public System.Numerics.Vector2 WindowPos => _windowPos;
     public System.Numerics.Vector2 WindowSize => _windowSize;
+    public Texture? MapTexture => _mapTexture;
+    public int OriginX => _originX;
+    public int OriginZ => _originZ;
+    public int TexWidth => _texWidth;
+    public int TexHeight => _texHeight;
 
     /// <summary>
     /// Draw the entire map panel contents. Call between BeginChild/EndChild in the parent.
@@ -81,7 +86,7 @@ public class MapRenderer
             drawList.AddText(
                 new System.Numerics.Vector2(_windowPos.X + 8, statusY),
                 yellowU32,
-                $"Map: {_texWidth}x{_texHeight}, zoom={_zoom:F1}");
+                $"Map: {_texWidth}x{_texHeight}  Zoom: {_zoom * 100 / 4f:F0}%  Center: ({ViewCenterX:F0}, {ViewCenterZ:F0})");
 
             // Cursor info (right-aligned)
             if (!string.IsNullOrEmpty(CursorInfoText))
@@ -110,11 +115,12 @@ public class MapRenderer
         var mousePos = io.MousePos;
         var localMouse = new System.Numerics.Vector2(mousePos.X - _windowPos.X, mousePos.Y - _windowPos.Y);
 
-        bool leftDown = io.MouseDown[0];
-        bool leftClicked = leftDown && !_wasLeftDown;
-        bool leftReleased = !leftDown && _wasLeftDown;
+        // Pan with middle mouse button
+        bool middleDown = io.MouseDown[2];
+        bool middleClicked = middleDown && !_wasLeftDown;
+        bool middleReleased = !middleDown && _wasLeftDown;
 
-        if (leftClicked && !io.KeyShift)
+        if (middleClicked)
         {
             _isPanning = true;
             _panStart = localMouse;
@@ -122,7 +128,7 @@ public class MapRenderer
             PanDistance = 0;
         }
 
-        if (_isPanning && leftDown)
+        if (_isPanning && middleDown)
         {
             var delta = new System.Numerics.Vector2(localMouse.X - _panStart.X, localMouse.Y - _panStart.Y);
             _panX = _panStartOffset.X + delta.X;
@@ -130,10 +136,10 @@ public class MapRenderer
             PanDistance = MathF.Sqrt(delta.X * delta.X + delta.Y * delta.Y);
         }
 
-        if (leftReleased)
+        if (middleReleased)
             _isPanning = false;
 
-        _wasLeftDown = leftDown;
+        _wasLeftDown = middleDown;
 
         // Zoom: scroll wheel toward cursor
         if (MathF.Abs(io.MouseWheel) > 0.001f)
@@ -231,6 +237,8 @@ public class MapRenderer
     }
 
     public float BlockScreenSize => _zoom;
+    public float ViewCenterX => (_windowSize.X / 2f - _panX) / _zoom + _originX;
+    public float ViewCenterZ => (_windowSize.Y / 2f - _panZ) / _zoom + _originZ;
 
     public void Clear()
     {

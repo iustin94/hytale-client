@@ -5,13 +5,20 @@ namespace HytaleAdmin.Services;
 
 public class HytaleApiClient : IDisposable
 {
-    private readonly HttpClient _http = new();
+    private readonly HttpClient _http;
 
     public event Action<string>? StatusChanged;
     public event Action<string, string>? RequestLogged; // method, url
     public event Action<string, bool, string?>? ResponseLogged; // url, success, detail
 
     public string BaseUrl { get; set; } = "http://localhost:8080";
+
+    public HytaleApiClient() : this(new HttpClient()) {}
+
+    public HytaleApiClient(HttpClient httpClient)
+    {
+        _http = httpClient;
+    }
 
     private void SetStatus(string msg) => StatusChanged?.Invoke(msg);
     private void LogReq(string method, string url) => RequestLogged?.Invoke(method, url);
@@ -255,44 +262,76 @@ public class HytaleApiClient : IDisposable
         catch (Exception ex) { SetStatus($"Prefab failed: {ex.Message}"); return null; }
     }
 
-    // ─── Assets ───────────────────────────────────────────────────
+    // ─── Assets (via HyAssets plugin) ──────────────────────────────
 
-    public async Task<Dictionary<string, Dictionary<string, string[]>>?> GetAssetsAsync()
+    /// <summary>
+    /// Fetches all asset entities for a category, paginating automatically at 1000 per page.
+    /// </summary>
+    public async Task<List<PluginEntitySummaryDto>> GetAssetEntitiesAllPagesAsync(string? categoryFilter = null)
     {
-        try { return await _http.GetFromJsonAsync<Dictionary<string, Dictionary<string, string[]>>>($"{BaseUrl}/api/assets"); }
+        var all = new List<PluginEntitySummaryDto>();
+        int offset = 0;
+        const int pageSize = 1000;
+
+        while (true)
+        {
+            try
+            {
+                var resp = await _http.GetFromJsonAsync<PluginEntityListResponse>(
+                    $"{BaseUrl}/api/plugins/hyassets/entities?limit={pageSize}&offset={offset}");
+                if (resp?.Data == null || resp.Data.Length == 0) break;
+
+                if (categoryFilter != null)
+                    all.AddRange(resp.Data.Where(e =>
+                        string.Equals(e.Group, categoryFilter, StringComparison.OrdinalIgnoreCase)));
+                else
+                    all.AddRange(resp.Data);
+
+                offset += resp.Data.Length;
+                if (offset >= resp.Total) break;
+            }
+            catch { break; }
+        }
+        return all;
+    }
+
+    public async Task<PluginEntityValuesDto?> GetAssetDetailAsync(string category, string assetId)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<PluginEntityValuesDto>(
+                $"{BaseUrl}/api/plugins/hyassets/entities/{Uri.EscapeDataString(category)}:{Uri.EscapeDataString(assetId)}");
+        }
         catch { return null; }
     }
 
-    public async Task<BlockDetailDto?> GetBlockDetailAsync(string id)
+    public async Task<ActionResultDto?> PlaceAssetAsync(string category, string assetId, string world, float x, float y, float z, int rotation = 0)
     {
-        try { return await _http.GetFromJsonAsync<BlockDetailDto>($"{BaseUrl}/api/assets/blocks/{Uri.EscapeDataString(id)}"); }
-        catch { return null; }
-    }
-
-    public async Task<ItemDetailDto?> GetItemDetailAsync(string id)
-    {
-        try { return await _http.GetFromJsonAsync<ItemDetailDto>($"{BaseUrl}/api/assets/items/{Uri.EscapeDataString(id)}"); }
-        catch { return null; }
-    }
-
-    public async Task<NpcDetailDto?> GetNpcDetailAsync(string name)
-    {
-        try { return await _http.GetFromJsonAsync<NpcDetailDto>($"{BaseUrl}/api/assets/npcs/{Uri.EscapeDataString(name)}"); }
-        catch { return null; }
-    }
-
-    public async Task<Dictionary<string, string[]>?> GetModelsAsync()
-    {
-        try { return await _http.GetFromJsonAsync<Dictionary<string, string[]>>($"{BaseUrl}/api/assets/models"); }
-        catch { return null; }
-    }
-
-    public async Task<AssetSearchResponse?> SearchAssetsAsync(string query, string? category = null, int limit = 50)
-    {
-        var url = $"{BaseUrl}/api/assets/search?q={Uri.EscapeDataString(query)}&limit={limit}";
-        if (!string.IsNullOrEmpty(category)) url += $"&category={category}";
-        try { return await _http.GetFromJsonAsync<AssetSearchResponse>(url); }
-        catch { return null; }
+        var entityId = $"{category}:{assetId}";
+        var url = $"/api/plugins/hyassets/entities/{Uri.EscapeDataString(entityId)}/actions/place";
+        LogReq("POST", $"{url}  world={world} pos=({x:F1},{y:F1},{z:F1}) rot={rotation}");
+        try
+        {
+            var body = new Dictionary<string, string>
+            {
+                ["world"] = world,
+                ["x"] = x.ToString("F1"),
+                ["y"] = y.ToString("F1"),
+                ["z"] = z.ToString("F1"),
+                ["rotation"] = rotation.ToString()
+            };
+            var resp = await _http.PostAsJsonAsync($"{BaseUrl}{url}", body);
+            var respBody = await resp.Content.ReadAsStringAsync();
+            LogResp(url, resp.IsSuccessStatusCode, $"[{(int)resp.StatusCode}] {respBody}");
+            var result = System.Text.Json.JsonSerializer.Deserialize<ActionResultDto>(respBody);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            LogResp(url, false, ex.Message);
+            SetStatus($"Place failed: {ex.Message}");
+            return null;
+        }
     }
 
     // ─── Sound ────────────────────────────────────────────────────
@@ -354,7 +393,7 @@ public class HytaleApiClient : IDisposable
         catch (Exception ex) { SetStatus($"Stop ambient failed: {ex.Message}"); return null; }
     }
 
-    // ─── Place (legacy) ───────────────────────────────────────────
+    // ─── Place (legacy — kept for world prefab placement) ─────────
 
     public async Task<PlaceResponse?> PlaceAsync(PlaceRequest request)
     {
@@ -405,6 +444,84 @@ public class HytaleApiClient : IDisposable
             return result;
         }
         catch (Exception ex) { SetStatus($"Command failed: {ex.Message}"); return null; }
+    }
+
+    // ─── Plugins (Dashboard Schema) ─────────────────────────────
+
+    public async Task<PluginSummaryDto[]?> GetPluginsAsync()
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<PluginSummaryDto[]>($"{BaseUrl}/api/plugins");
+        }
+        catch { return null; }
+    }
+
+    public async Task<PluginSchemaDto?> GetPluginSchemaAsync(string pluginId)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<PluginSchemaDto>($"{BaseUrl}/api/plugins/{pluginId}/schema");
+        }
+        catch { return null; }
+    }
+
+    public async Task<PluginEntityListResponse?> GetPluginEntitiesAsync(string pluginId)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<PluginEntityListResponse>(
+                $"{BaseUrl}/api/plugins/{pluginId}/entities?limit=500");
+        }
+        catch { return null; }
+    }
+
+    public async Task<PluginEntityValuesDto?> GetPluginEntityValuesAsync(string pluginId, string entityId)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<PluginEntityValuesDto>(
+                $"{BaseUrl}/api/plugins/{pluginId}/entities/{entityId}");
+        }
+        catch { return null; }
+    }
+
+    public async Task<ApiResponse?> UpdatePluginEntityAsync(string pluginId, string entityId,
+        Dictionary<string, string> values)
+    {
+        SetStatus("Updating entity...");
+        try
+        {
+            var body = new { values };
+            var resp = await _http.PostAsJsonAsync(
+                $"{BaseUrl}/api/plugins/{pluginId}/entities/{entityId}", body);
+            var raw = await resp.Content.ReadAsStringAsync();
+            Console.Error.WriteLine($"[API] UpdateEntity {entityId} status={resp.StatusCode} body={raw}");
+            var result = System.Text.Json.JsonSerializer.Deserialize<ApiResponse>(raw);
+            SetStatus(result?.Success == true ? "Entity updated" : $"Update failed: {result?.Error}");
+            return result;
+        }
+        catch (Exception ex) { SetStatus($"Update failed: {ex.Message}"); return null; }
+    }
+
+    public async Task<ActionResultDto?> ExecutePluginActionAsync(string pluginId, string actionId,
+        string? entityId, Dictionary<string, string> parameters)
+    {
+        SetStatus($"Executing {actionId}...");
+        try
+        {
+            var url = entityId != null
+                ? $"{BaseUrl}/api/plugins/{pluginId}/entities/{entityId}/actions/{actionId}"
+                : $"{BaseUrl}/api/plugins/{pluginId}/actions/{actionId}";
+            var body = new { parameters };
+            var resp = await _http.PostAsJsonAsync(url, body);
+            var result = await resp.Content.ReadFromJsonAsync<ActionResultDto>();
+            SetStatus(result?.Success == true
+                ? result.Message ?? "Action completed"
+                : $"Action failed: {result?.Errors?.FirstOrDefault() ?? "Unknown error"}");
+            return result;
+        }
+        catch (Exception ex) { SetStatus($"Action failed: {ex.Message}"); return null; }
     }
 
     public void Dispose() => _http.Dispose();

@@ -8,6 +8,7 @@ public static class InputMap
     {
         InputAction.LoadMap => input.IsKeyPressed(Keys.Enter),
         InputAction.Cancel => input.IsKeyPressed(Keys.Escape),
+        InputAction.RotateAsset => input.IsKeyPressed(Keys.R),
         InputAction.Quit => input.IsKeyPressed(Keys.Q),
         _ => false
     };
