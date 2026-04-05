@@ -152,6 +152,26 @@ public class QuestWizard
         {
             _lastTaskTypeIdx = _taskTypeIdx;
             _taskForm = TaskFormFactory.Create(TaskTypes[_taskTypeIdx], _client);
+
+            // Wire external creation callbacks
+            if (_taskForm is ReachLocationTaskForm reachForm)
+            {
+                reachForm.OnCreateLocation = onCreated =>
+                {
+                    _mapPicker?.Open("Pick Location for Quest", (x, z) =>
+                    {
+                        CreateLocationAt(x, z, onCreated);
+                    });
+                };
+            }
+            else if (_taskForm is UseEntityTaskForm ueForm)
+            {
+                ueForm.OnCreateDialog = onCreated =>
+                {
+                    // Dialog is created inline in the form — no external picker needed
+                    // The form handles inline creation via _createInline flag
+                };
+            }
         }
 
         ImGui.Spacing();
@@ -181,7 +201,7 @@ public class QuestWizard
             ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.78f, 1f), "Choose a quest giver NPC:");
             ImGui.Spacing();
 
-            // Option 1: pick existing from map
+            // Option 1: pick existing from map (works for HyCitizens and standard NPCs)
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.77f, 0.29f, 0.55f, 1f));
             ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.1f, 0.1f, 0.12f, 1f));
             if (ImGui.Button("Pick Existing NPC on Map##wiz_pick", new Vector2(-1, 0)))
@@ -195,10 +215,13 @@ public class QuestWizard
 
             ImGui.Spacing();
 
-            // Option 2: spawn new
+            ImGui.TextColored(new Vector4(0.5f, 0.5f, 0.58f, 1f), "Use this for HyCitizens or any NPC already in the world");
+            ImGui.Spacing();
+
+            // Option 2: spawn new standard NPC
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.40f, 0.70f, 0.95f, 1f));
             ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.1f, 0.1f, 0.12f, 1f));
-            if (ImGui.Button("Spawn New NPC##wiz_spawn", new Vector2(-1, 0)))
+            if (ImGui.Button("Spawn New Standard NPC##wiz_spawn", new Vector2(-1, 0)))
             {
                 _showSpawnFlow = true;
                 _selectedSpawnType = null;
@@ -207,7 +230,9 @@ public class QuestWizard
                     _npcTypesLoading = true;
                     _ = Task.Run(async () =>
                     {
-                        _npcTypes = await _client.GetEntityTypesAsync("default");
+                        var types = await _client.GetEntityTypesAsync("default");
+                        // Filter out meta-categories that aren't spawnable roles
+                        _npcTypes = types?.Where(t => t != "HyCitizens").ToArray() ?? [];
                         _npcTypesLoading = false;
                     });
                 }
@@ -287,6 +312,47 @@ public class QuestWizard
             if (ImGui.Button("Back (change type)##wiz_spawn_back2", new Vector2(-1, 0)))
                 _selectedSpawnType = null;
         }
+    }
+
+    private void CreateLocationAt(float worldX, float worldZ, Action<string> onCreated)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                float y = 64;
+                try
+                {
+                    var resp = await _client.GetSurfaceAsync("default", (int)worldX, (int)worldZ, 0);
+                    if (resp?.Surface is { Length: > 0 }) y = resp.Surface[0].Y;
+                }
+                catch { }
+
+                var result = await _client.ExecutePluginActionAsync(PluginId, "createLocation", null,
+                    new Dictionary<string, string>
+                    {
+                        ["label"] = $"Location ({worldX:F0}, {worldZ:F0})",
+                        ["x"] = worldX.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
+                        ["y"] = y.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
+                        ["z"] = worldZ.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
+                        ["radius"] = "5.0",
+                    });
+
+                if (result?.Success == true)
+                {
+                    string locLabel = $"Location ({worldX:F0}, {worldZ:F0})";
+                    onCreated(locLabel);
+                }
+                else
+                {
+                    _error = $"Failed to create location: {string.Join(", ", result?.Errors ?? ["Unknown"])}";
+                }
+            }
+            catch (Exception ex)
+            {
+                _error = $"Error: {ex.Message}";
+            }
+        });
     }
 
     private void SpawnNpcAndUse(string npcType, float worldX, float worldZ)
@@ -375,15 +441,13 @@ public class QuestWizard
         }
         else
         {
-            bool canFinish = _pickedNpc != null || _skipNpc;
+            bool canFinish = (_pickedNpc != null || _skipNpc) && !_executing;
             if (!canFinish) ImGui.BeginDisabled();
-            if (_executing) ImGui.BeginDisabled();
             ImGui.PushStyleColor(ImGuiCol.Button, new Vector4(0.31f, 0.80f, 0.40f, 1f));
             ImGui.PushStyleColor(ImGuiCol.Text, new Vector4(0.1f, 0.1f, 0.12f, 1f));
             if (ImGui.Button(_executing ? "Creating..." : "Finish##wiz_finish", new Vector2(btnW, 0)))
                 ExecuteWizard();
             ImGui.PopStyleColor(2);
-            if (_executing) ImGui.EndDisabled();
             if (!canFinish) ImGui.EndDisabled();
         }
     }
@@ -427,7 +491,24 @@ public class QuestWizard
 
                 string questId = questResult.EntityId ?? "";
 
-                // 2. Assign NPC if picked
+                // 2. Create inline dialog if task form requested it
+                if (_taskForm != null)
+                {
+                    var taskVals = _taskForm.GetValues();
+                    if (taskVals.GetValueOrDefault("_createDialog") == "true")
+                    {
+                        var npcName = taskVals.GetValueOrDefault("_dialogNpcName", "");
+                        var dlgText = taskVals.GetValueOrDefault("_dialogText", "");
+                        await _client.ExecutePluginActionAsync(PluginId, "createDialog", null,
+                            new Dictionary<string, string>
+                            {
+                                ["entityNameText"] = npcName,
+                                ["dialogText"] = dlgText,
+                            });
+                    }
+                }
+
+                // 3. Assign NPC if picked
                 if (_pickedNpc != null && !string.IsNullOrEmpty(questId))
                 {
                     string npcRole = _pickedNpc.Type ?? "";
@@ -440,6 +521,13 @@ public class QuestWizard
                             ["npcRole"] = npcRole,
                             ["assignmentType"] = "QUEST_GIVER",
                         });
+
+                    // Store entity UUID for interaction matching
+                    if (!string.IsNullOrEmpty(_pickedNpc.Uuid))
+                    {
+                        await _client.UpdatePluginEntityAsync(PluginId, $"npc-assign:{npcId}",
+                            new Dictionary<string, string> { ["npc_entityUuid"] = _pickedNpc.Uuid });
+                    }
 
                     await _client.ExecutePluginActionAsync(PluginId, "setQuestGiver", null,
                         new Dictionary<string, string>

@@ -38,6 +38,9 @@ public class EditorScene : IGameScene
     private bool _npcTypesLoading;
     private string _npcTypeFilter = "";
 
+    // Map action dialog
+    private UI.Components.MapActionDialog? _mapActionDialog;
+
     public EditorScene(ServiceContainer services)
     {
         _services = services;
@@ -52,8 +55,12 @@ public class EditorScene : IGameScene
         _editorUi = new EditorUI(services, _services,
             _mapRenderer, _entityRenderer, _selectionRenderer, LoadMapAsync);
 
-        // Wire context menu delegate
-        _editorUi.DrawMapContextMenu = DrawContextMenu;
+        // Wire context menu delegate + map action dialog
+        _editorUi.DrawMapContextMenu = () =>
+        {
+            DrawContextMenu();
+            _mapActionDialog?.Draw();
+        };
 
         // Wire events
         _services.ApiClient.StatusChanged += msg => _editorUi.SetStatus(msg);
@@ -69,6 +76,8 @@ public class EditorScene : IGameScene
         {
             _entityRenderer?.Refresh(_services.EntityData);
         };
+
+        _mapActionDialog = new UI.Components.MapActionDialog(_mapRenderer, _services.ApiClient);
 
         // Load asset catalog and server info in background
         _ = _editorUi.LoadAssetsAsync();
@@ -410,14 +419,15 @@ public class EditorScene : IGameScene
                 ImGui.Separator();
             }
 
-            // Create location at this position
-            if (ImGui.MenuItem("Create Location Here"))
-            {
-                _ = CreateLocationAtAsync(_rightClickWorldPos);
-            }
-
-            // Spawn NPC submenu
-            DrawSpawnNpcMenu();
+            // Map actions via dialog
+            if (ImGui.MenuItem("Spawn NPC"))
+                _mapActionDialog?.Open(new UI.Components.MapActions.SpawnNpcAction(_services.ApiClient));
+            if (ImGui.MenuItem("Create Location"))
+                _mapActionDialog?.Open(new UI.Components.MapActions.CreateLocationAction(_services.ApiClient));
+            if (ImGui.MenuItem("Place Prefab"))
+                _mapActionDialog?.Open(new UI.Components.MapActions.PlacePrefabAction(_services.ApiClient));
+            if (ImGui.MenuItem("Create Sound Zone"))
+                _mapActionDialog?.Open(new UI.Components.MapActions.CreateSoundZoneAction(_services.ApiClient));
 
             ImGui.Separator();
 
@@ -459,7 +469,8 @@ public class EditorScene : IGameScene
                 _npcTypesLoading = true;
                 _ = Task.Run(async () =>
                 {
-                    _npcTypes = await _services.ApiClient.GetEntityTypesAsync(_services.Config.WorldId);
+                    var types = await _services.ApiClient.GetEntityTypesAsync(_services.Config.WorldId);
+                    _npcTypes = types?.Where(t => t != "HyCitizens").ToArray() ?? [];
                     _npcTypesLoading = false;
                 });
             }

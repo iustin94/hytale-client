@@ -314,3 +314,4 @@
 /home/iustinian/Projects/hytale-admin-dashboard/hytale-client/tests/obj/Debug/net10.0/HytaleAdmin.Tests.pdb
 /home/iustinian/Projects/hytale-admin-dashboard/hytale-client/tests/obj/Debug/net10.0/HytaleAdmin.Tests.genruntimeconfig.cache
 /home/iustinian/Projects/hytale-admin-dashboard/hytale-client/tests/obj/Debug/net10.0/ref/HytaleAdmin.Tests.dll
+/home/iustinian/Projects/hytale-admin-dashboard/hytale-client/tests/obj/Debug/net10.0/HytaleAdmin.Tests.sourcelink.json

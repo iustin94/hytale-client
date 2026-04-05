@@ -55,7 +55,8 @@ public class SearchableDropdown
             });
         }
 
-        ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.78f, 1f), label);
+        if (!string.IsNullOrEmpty(label))
+            ImGui.TextColored(new Vector4(0.7f, 0.7f, 0.78f, 1f), label);
 
         ImGui.SetNextItemWidth(-1);
         ImGui.InputText($"##filter_{_id}", ref _filter, 128);

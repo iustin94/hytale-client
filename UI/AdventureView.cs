@@ -1264,7 +1264,7 @@ public class AdventureView
         {
             try
             {
-                // 1. Create NPC Assignment with the selected entity's role
+                // 1. Create NPC Assignment with the selected entity's role + UUID
                 var createResult = await _client.ExecutePluginActionAsync(PluginId, "createNpcAssignment", null,
                     new Dictionary<string, string>
                     {
@@ -1272,6 +1272,13 @@ public class AdventureView
                         ["npcRole"] = npcRole,
                         ["assignmentType"] = "QUEST_GIVER",
                     });
+
+                // Store entity UUID on the NPC assignment for interaction matching
+                if (createResult?.Success == true && !string.IsNullOrEmpty(entity.Uuid))
+                {
+                    await _client.UpdatePluginEntityAsync(PluginId, $"npc-assign:{npcId}",
+                        new Dictionary<string, string> { ["npc_entityUuid"] = entity.Uuid });
+                }
 
                 if (createResult?.Success != true)
                 {
